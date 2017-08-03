@@ -34,28 +34,69 @@ mov qword ptr [rbp - 0x148],  rdi
 mov qword ptr [rbp - 0x150],  rbx
 
 #here we do something, really safe (?)
+#160 = "libkernel.sprx"
+#168 = libkernel.sprx solved module addr
+#170 = "sceKernelLoadStartModule"
+#178 = function ptr
 
 call name1
-.ascii "libkernel.sprx\n"
+.ascii "libkernel.sprx"
 .byte 0
 name1:
 pop rax
 mov qword ptr [rbp - 0x160], rax
 
-mov rcx, 15 #arg3 
-mov r10, 15 #arg3 
-mov rdx, qword ptr [rbp - 0x160] #arg2
-mov rsi, 1 #arg1 stdout
-mov rdi, 4 #syscall
-mov rax, 0
+call name2
+.ascii "sceKernelLoadStartModule"
+.byte 0
+name2:
+pop rax
+mov qword ptr [rbp - 0x170], rax #store whatever func
+
+call testcall
+
+mov dword ptr [rbp - 0x168], 0xc0fec0fe
+
+# ps4StubResolveSystemCall(594, "libkernel.sprx", 0, &outaddr_kernelbase, 0);
+lea rax, qword ptr [rbp - 0x168]
+
+mov rcx, rax #arg3 
+mov r10, rax #arg3 
+mov rdx, rax #arg2
+mov rsi, 0 #arg1 stdout
+mov rdi, qword ptr [rbp - 0x160] #syscall
+mov rax, 594
 syscall
 
-# mov r11, 9
-# shl r11, 32
-# add r11, 0x3a4ffff8
-# mov r11, qword ptr [r11]
-# call r11
+#if eax != 0, error
+test eax, eax
+jnz result_error
 
+# 591, module_addr, name, 0, &outaddr
+lea rax, qword ptr [rbp - 0x178]
+
+mov rcx, rax #arg3 
+mov r10, rax #arg3 
+mov rdx, rax
+mov rsi, qword ptr [rbp - 0x170]
+mov rdi, qword ptr [rbp - 0x168] #syscall
+mov rax, 0x24f
+syscall
+
+test eax, eax
+jnz result_error
+
+#call testcall
+
+mov rax, qword ptr [rbp - 0x178]
+
+#final stuff
+jmp result_sucess
+
+result_error:
+mov rax, -1
+
+result_sucess:
 
 mov r15, qword ptr [rbp - 0x90]
 mov r14, qword ptr [rbp - 0x98]
@@ -85,21 +126,25 @@ pop rbp
 
 ret
 
-getlibbase:
-    #which lib on which register?
-    push rcx
-    mov rax, 594
+testcall:
+    mov rcx, 15 #arg3 
+    mov r10, 15 #arg3 
+    mov rdx, qword ptr [rbp - 0x160] #arg2
+    mov rsi, 1 #arg1 stdout
+    mov rdi, 4 #syscall
+    mov rax, 0
     syscall
     ret
 
-getfuncaddr:
-    #which lib on which register?
-    push qword ptr [rbp - 0x4]
-    mov rax, 591
-    syscall
-    ret
+    # this is setup from the rop on webkit
 
-.ascii "ENDHERE\n"
+    # mov r11, 9
+    # shl r11, 32
+    # add r11, 0x3a4ffff8
+    # mov r11, qword ptr [r11]
+    # call r11
+
+.ascii "PAYLOADENDSHERE\n"
 
 .att_syntax
 

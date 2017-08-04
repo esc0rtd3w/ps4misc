@@ -2,7 +2,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import time
 
 hostName = "0.0.0.0"
-hostPort = 8080
+hostPort = 9000 
 
 class MyServer(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -14,7 +14,7 @@ class MyServer(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "text/xml")
             self.end_headers()
-            self.wfile.write(bytes(open("update\ps4\list\jp\ps4-updatelist.xml").read(), "utf-8"))
+            self.wfile.write(bytes(open("update/ps4/list/jp/ps4-updatelist.xml").read(), "utf-8"))
             return
         if self.path.startswith("http://manuals.playstation.net/document/cs/ps4/"):
             

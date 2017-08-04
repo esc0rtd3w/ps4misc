@@ -178,14 +178,19 @@ char * readdata_hex(pid, pos, dumpsize) {
     return readbuff;
 }
 
-//dest will be 0x683f94
-//lea eax, 0x868000
-__asm("alol: \
-    movq    %rdi, (%rax)     \n\
-    ret \
-  ");
+char * msearch(char * start, char * haystack, int size) 
+{
+    char* mymem = start;
+    for(;;){
+        if (strncmp(mymem, haystack, size) == 0){
+            return mymem;
+        }
+        mymem ++;
+    }
+}
 
-void alol();
+
+void ps4RelocPayload();
 
 int main(int argc, char **argv) {
     int dbgprint = 0;
@@ -277,17 +282,21 @@ int main(int argc, char **argv) {
 
 		uint64_t base = start[0]; // use the number of the mapping you want to write to, starting with 0
 		size_t intoBase = 0x14edfc;
-		char *writebuff = malloc(writesize); 
+
 		char *readbuff = malloc(dumpsize); 
 		
-		memset(writebuff, 0, writesize); // fill the write buffer with the changes you need to make, doesnt have to be a memset
         memset(readbuff, 0, dumpsize);
 
 		// when writing or reading form mem, change intoBase to be how far into that mapping you want to read or write to
 		// read_process_form_sys(pid, base + intoBase, readbuff, dumpsize); 
 		// ps4StandardIoPrintHexDump(readbuff, dumphexsize);
 		
-        readbuff = readdata_hex(pid, start[0] + 0x892868, 0x60);
+        uint64_t p_ret_inst = start[0] + 0x41ec; //some ret in sceshellcore.elf
+        uint64_t useless_zone = start[0] + 0x683f94;
+        uint64_t traceflag = start[0] + 0x8d66f6;
+        uint64_t p_tracefunc = start[0] + 0x892868;
+
+        readbuff = readdata_hex(pid, p_tracefunc, 0x60);
         free(readbuff);
 
         printf("\n");
@@ -297,19 +306,26 @@ int main(int argc, char **argv) {
 
         printf("\n");
 
-        memcpy(writebuff, "\x48\x8d\x73\x40\x1e\x00", 7);
-        memcpy(writebuff + 7, alol, 0x20);
+        char * mymem = msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15);
+        writesize = (uint64_t)mymem - (uint64_t)ps4RelocPayload;
+
+        char *writebuff = malloc(writesize);
+        memcpy(writebuff, ps4RelocPayload, writesize);
+
+        char * userdata = msearch(writebuff, "USER_INPUT_DATA", 15);
+        *(uint64_t*)userdata = start[1];
         
-        write_process_form_sys(pid, start[0] + 0x683f94, writebuff, writesize);
 
-        uint64_t pos = start[0] + 0x683f94;
+        printf("useless zone: %x payloadsize: %d datadest: %x\n", useless_zone, writesize, start[1]);
+        
+        write_process_form_sys(pid, useless_zone, writebuff, writesize); //useless zone(exceptions list), has some extra bytes
 
-        write_process_form_sys(pid, start[0] + 0x892868, (char*)&pos, 8);
+        write_process_form_sys(pid, p_tracefunc, (char*)&useless_zone, 8);
 
-        write_process_form_sys(pid, start[0] + 0x8d66f6, "\x01", 1); //enable debug
+        write_process_form_sys(pid, traceflag, "\x01", 1); //enable debug
 
 
-        readbuff = readdata_hex(pid, start[0] + 0x683f94, 0x60);
+        readbuff = readdata_hex(pid, useless_zone, 0x60);
         free(readbuff);
 
         //memcpy(writebuff, "\xc3\xc3", 2);

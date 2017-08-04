@@ -48,18 +48,19 @@ int main(int argc, char *argv[]) {
     //int f = fork();
     //printf("fork result: %d\n", f);
     //if (f == 0) {
-        uint64_t (*functionPtr)() = &ps4RelocPayload;
 
-        // uint64_t ret3 = sceKernelLoadStartModule("libkernel.sprx", 0, NULL, 0, 0, 0);
-        // printf("that lib? %016llX\n", ret3);
+    uint64_t (*functionPtr)() = &ps4RelocPayload;
 
-        // printf("sceKernelLoadStartModule %016llX\n", ps4StubResolve_ps4StubResolveLoadStartModule);
+    // uint64_t ret3 = sceKernelLoadStartModule("libkernel.sprx", 0, NULL, 0, 0, 0);
+    // printf("that lib? %016llX\n", ret3);
 
-        uint64_t payloadret = functionPtr();
-        printf("after func call\n");
-        printf("ret %016llX\n", payloadret);
+    // printf("sceKernelLoadStartModule %016llX\n", ps4StubResolve_ps4StubResolveLoadStartModule);
 
-        ps4StandardIoPrintHexDump(payloadret, 0x100);
+    uint64_t payloadret = functionPtr();
+    printf("after func call\n");
+    printf("ret %016llX\n", payloadret);
+
+    ps4StandardIoPrintHexDump(payloadret, 0x100);
 
         //exit(0);
     //}

@@ -234,25 +234,20 @@ dosendtext pttextout31 "everything started, waiting instructions\n"
 
 # dosendtext pttextout310 "exit resolved\n"
 
-resolvefunc fork "[rbp - 0x220]"
+resolvefunc fork "[rbp - 0x230]"
 
 dosendtext pttextout311 "fork resolved\n"
 
-resolvefunc execve "[rbp - 0x240]"
+resolvefunc execve "[rbp - 0x238]"
 
 dosendtext pttextout312 "execve resolved\n"
 
 #fork
-call [rbp - 0x220]
+call [rbp - 0x230]
 test eax, eax
 jnz checkforkerror
 
-dosendtext pttextout32 "i'm a slave!\n"
-
-#exit syscall
-mov rdi, 0
-mov rax, 1
-syscall
+jmp slave_thread
 
 checkforkerror:
 test eax, eax
@@ -300,8 +295,6 @@ result_error:
 
 result_sucess:
 
-mov rax, 0
-
 mov r15, qword ptr [rbp - 0x90]
 mov r14, qword ptr [rbp - 0x98]
 mov r13, qword ptr [rbp - 0x100]
@@ -327,6 +320,8 @@ movdqu xmm0, xmmword ptr [rbp - 0x80]
 
 mov rsp, rbp
 pop rbp
+
+mov rax, 0
 
 ret
 
@@ -365,6 +360,51 @@ _strlen_null:
 
 stage2:
     ret
+
+
+slave_thread:
+    dosendtext pttextout41 "i'm a slave!\n"
+
+    call params
+    .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    params:
+    pop rcx
+    mov rdx, rcx
+    mov rsi, rcx
+
+    call filename
+    .asciz "/system_ex/app/NPXS20114/eboot.bin"
+    filename:
+    pop rdi
+    call [rbp - 0x238] #execve
+
+    test eax, eax
+    jnz execve_failed
+
+    dosendtext pttextout42 "execve sucess!\n"
+
+    jmp slave_exit
+
+execve_failed:
+    dosendtext pttextout43 "execve failed!\n"
+
+
+    lea rsi, [rbp - 0x240]
+    mov [rsi], eax
+    mov edx, 4
+
+    mov     edi, [r15 - 0x218] # fd
+    mov     eax, 0
+    call    [r15 - 0x210] #_write
+
+slave_exit:
+
+    #exit syscall
+    mov rdi, 0
+    mov rax, 1
+    syscall
+
+
 
 .ascii "PAYLOADENDSHERE\n"
 extern:

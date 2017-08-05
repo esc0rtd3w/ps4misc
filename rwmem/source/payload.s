@@ -192,6 +192,7 @@ resolvefunc write "[rbp - 0x210]"
 #0x218 socket fd
 resolvefunc sceKernelSpawn "[rbp - 0x220]"
 resolvefunc sceKernelStat "[rbp - 0x228]"
+resolvefunc dup2 "[rbp - 0x240]"
 
 #socket
     mov     edx, 0          # protocol
@@ -365,6 +366,10 @@ stage2:
 slave_thread:
     dosendtext pttextout41 "i'm a slave!\n"
 
+    mov rdi, [r15 - 0x218]
+    mov rsi, 1 #STDOUT_FILENO
+    call [rbp - 0x240]
+
     call params
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     params:
@@ -373,7 +378,7 @@ slave_thread:
     mov rsi, rcx
 
     call filename
-    .asciz "/system_ex/app/NPXS20114/eboot.bin"
+    .asciz "/data/ls"
     filename:
     pop rdi
     call [rbp - 0x238] #execve

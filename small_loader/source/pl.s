@@ -133,7 +133,7 @@ resolvefunc write "[rbp - 0x210]"
 #0x218 socket fd
 resolvefunc fork "[rbp - 0x230]"
 resolvefunc execve "[rbp - 0x238]"
-
+resolvefunc dup2 "[rbp - 0x240]"
 
 #socket
     mov     edx, 0          # protocol
@@ -159,6 +159,12 @@ resolvefunc execve "[rbp - 0x238]"
     call    [r15 - 0x198] #connect
     test    eax, eax
     js     result_error
+
+    mov rdi, [r15 - 0x218]
+    mov rsi, 1 #STDOUT_FILENO
+    call [rbp - 0x240]
+
+    doprinttext pttextout_got_socket2 "printed\n"
 
 
     lea rsi, [rbp - 0x238]

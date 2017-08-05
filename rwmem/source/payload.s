@@ -3,8 +3,63 @@
 .type ps4RelocPayload, @function
 .intel_syntax
 
-ps4RelocPayload:
+.macro resolvefunc fname dest
+    call \fname\()_definition
+    .asciz "\fname\()"
+    \fname\()_definition:
+    pop rax
+    mov qword ptr [rbp - 0x170], rax
+    lea rax, qword ptr \dest\()
+    mov rsi, qword ptr [rbp - 0x170]
+    mov rdi, qword ptr [rbp - 0x168]
 
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rax #dest
+    mov rsi, rsi #function name
+    mov rdi, rdi #lib addr
+    mov rax, 0x24f
+    syscall
+
+    test eax, eax
+    jnz result_error
+
+.endm
+
+.macro doprinttext labeldef text
+    call \labeldef\()_definition
+    .asciz "\text\()"
+    \labeldef\()_definition:
+    pop rdx
+
+    mov rdi, rdx
+    call _strlen
+
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rdx #arg2
+    mov rsi, 1 #arg1 stdout
+    mov rdi, 4 #syscall
+    mov rax, 0
+    syscall
+.endm
+
+.macro dosendtext labeldef text
+    call \labeldef\()_definition
+    .asciz "\text\()"
+    \labeldef\()_definition:
+    pop rsi
+    mov rdi, rsi
+    call _strlen
+    mov edx, eax
+
+    mov     edi, [r15 - 0x218] # fd
+    mov     eax, 0
+    call    [r15 - 0x210] #_write
+.endm
+
+
+ps4RelocPayload:
 call inputdata
 .ascii "USER_INPUT_DATA"
 .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
@@ -61,6 +116,8 @@ push rbp
 mov rbp, rsp
 sub rsp, 0x400
 
+mov r15, rbp
+
 mov rax, qword ptr [rax]
 mov qword ptr [rbp - 0x180],  rax
 
@@ -94,75 +151,90 @@ mov qword ptr [rbp - 0x150],  rbx
 #178 = function ptr
 #180 = ptr to data sector
 
-call name1
-.ascii "libkernel.sprx"
-.byte 0
-name1:
-pop rax
-mov qword ptr [rbp - 0x160], rax
-
-call name2
-.ascii "sceKernelSpawn"
-.byte 0
-.ascii "sceKernelLoadStartModule"
-.byte 0
-.ascii "malloc"
-.byte 0
-name2:
-pop rax
-mov qword ptr [rbp - 0x170], rax #store whatever func
-
-call testcall
-
-mov dword ptr [rbp - 0x168], 0
 
 # ps4StubResolveSystemCall(594, "libkernel.sprx", 0, &outaddr_kernelbase, 0)#
-lea rax, qword ptr [rbp - 0x168]
+    lea rax, qword ptr [rbp - 0x168] #destination
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rax #arg2
+    mov rsi, 0 #arg1 stdout
 
-mov rcx, rax #arg3 
-mov r10, rax #arg3 
-mov rdx, rax #arg2
-mov rsi, 0 #arg1 stdout
-mov rdi, qword ptr [rbp - 0x160] #syscall
-mov rax, 594
-syscall
+    call name1
+    .asciz "libkernel.sprx"
+    name1:
+    pop rdi
 
-#if eax != 0, error
-test eax, eax
-jnz result_error
+    mov rdi, rdi
+    mov rax, 594
+    syscall
 
-# 591, module_addr, name, 0, &outaddr
-lea rax, qword ptr [rbp - 0x178]
+    #if eax != 0, error
+    test eax, eax
+    jnz result_error
 
-mov rcx, rax #arg3 
-mov r10, rax #arg3 
-mov rdx, rax
-mov rsi, qword ptr [rbp - 0x170]
-mov rdi, qword ptr [rbp - 0x168] #syscall
-mov rax, 0x24f
-syscall
+#doprinttext pttextout12 "starting 2...\n"
 
-test eax, eax
-jnz result_error
+resolvefunc sceKernelLoadStartModule "[rbp - 0x178]"
+resolvefunc socket "[rbp - 0x190]"
+resolvefunc connect "[rbp - 0x198]"
+resolvefunc close "[rbp - 0x200]"
+resolvefunc read "[rbp - 0x208]"
+resolvefunc write "[rbp - 0x210]"
+#0x218 socket fd
+resolvefunc sceKernelSpawn "[rbp - 0x220]"
+# resolvefunc fork "[rbp - 0x228]"
+# resolvefunc rfork "[rbp - 0x230]"
+# resolvefunc execve "[rbp - 0x238]"
 
-original:
+#socket
+    mov     edx, 0          # protocol
+    mov     esi, 1          # type
+    mov     edi, 2          # domain
+    call    [r15 - 0x190] #socket
 
-call clientname
-.ascii "/mnt/usb0/client"
-.byte 0
-clientname:
-pop rdx #filename goes to rdx
+    mov     [r15 - 0x218], eax
+    cmp     dword ptr [r15 - 0x218], 0
+    js     result_error
 
-lea rdi, [rbp - 0x190] #seems something goes out? or in struct
-xor esi, esi
-xor rcx, rcx
-mov rax, qword ptr [rbp - 0x178]
-call rax
+#init address struct and connect
+    lea     rdi, [rbp+0x10]
+    mov qword ptr [rdi], 0
+    mov qword ptr [rdi+8], 0
 
-mov rcx, qword ptr [rbp - 0x180]
-mov qword ptr [rcx+4], rax
+    mov     byte ptr [rbp-15], 2
+    mov     word ptr [rbp-14], 0x2923
+    mov     dword ptr [rbp-12], 0x1f02A8C0
+    lea     rsi, [rbp-0x10]  # addr
+    mov     edx, 0x10        # len
+    mov     edi, [r15 - 0x218] # fd
+    call    [r15 - 0x198] #connect
 
-#connect a socket, send, close
+    test    eax, eax
+    js     result_error
+
+
+#dosendtext pttextout3 "everything started, waiting instructions\n"
+
+
+#send 200 bytes of the resolved imports
+    lea rsi, [rbp - 0x220]
+    mov edx, 200
+
+    mov     edi, [r15 - 0x218] # fd
+    mov     eax, 0
+    call    [r15 - 0x210] #_write
+
+#close socket
+    mov     edi, [r15 - 0x218] # fd
+    mov     eax, 0
+    call    [r15 - 0x200] #_close
+
+#call testcall
+#call connect_and_send
+
+#mov rax, qword ptr [rbp - 0x178]
+#doprinttext pttextout_got_socket "connection finished\n"
+
 
 #final stuff
 jmp result_sucess
@@ -217,6 +289,21 @@ testcall:
     # add r11, 0x3a4ffff8
     # mov r11, qword ptr [r11]
     # call r11
+
+
+_strlen:
+  push  rcx            # save and clear out counter
+  xor   rcx, rcx
+_strlen_next:
+  cmp   byte ptr [rdi], 0  # null byte yet?
+  jz    _strlen_null   # yes, get out
+  inc   rcx            # char is ok, count it
+  inc   rdi            # move to next char
+  jmp   _strlen_next   # process again
+_strlen_null:
+  mov   rax, rcx       # rcx = the length (put in rax)
+  pop   rcx            # restore rcx
+  ret                  # get out
 
 .ascii "PAYLOADENDSHERE\n"
 extern:

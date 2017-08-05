@@ -96,7 +96,7 @@ mov r15, rbp
 #168 = libkernel.sprx solved module addr
 #170 = "sceKernelLoadStartModule"
 #178 = function ptr
-#180 = ?
+#180 = ptr to data sector
 
 doprinttext pttextout1 "starting...\n"
 
@@ -130,7 +130,7 @@ resolvefunc connect "[rbp - 0x198]"
 resolvefunc close "[rbp - 0x200]"
 resolvefunc read "[rbp - 0x208]"
 resolvefunc write "[rbp - 0x210]"
-#218 socket fd
+#0x218 socket fd
 
 
 #socket

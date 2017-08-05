@@ -44,6 +44,21 @@
     syscall
 .endm
 
+.macro dosendtext labeldef socket text
+    call \labeldef\()_definition
+    .asciz "\text\()"
+    \labeldef\()_definition:
+    pop rsi
+    mov rdi, rsi
+    call _strlen
+    mov edx, eax
+
+    mov     edi, [r15 - 0x218] # fd
+    mov     eax, 0
+    call    [r15 - 0x210] #_write
+.endm
+
+
 ps4RelocPayload:
 
 #alloc some stack space for outputs?
@@ -115,6 +130,8 @@ resolvefunc connect "[rbp - 0x198]"
 resolvefunc close "[rbp - 0x200]"
 resolvefunc read "[rbp - 0x208]"
 resolvefunc write "[rbp - 0x210]"
+#218 socket fd
+
 
 #socket
     mov     edx, 0          # protocol
@@ -122,18 +139,39 @@ resolvefunc write "[rbp - 0x210]"
     mov     edi, 2          # domain
     call    [r15 - 0x190] #socket
 
-    mov     [rbp-0x428], eax
-    cmp     dword ptr [rbp-0x428], 0
+    mov     [r15 - 0x218], eax
+    cmp     dword ptr [r15 - 0x218], 0
+    js     result_error
+
+#init address struct and connect
+    lea     rdi, [rbp+0x10]
+    mov qword ptr [rdi], 0
+    mov qword ptr [rdi+8], 0
+
+    mov     byte ptr [rbp-15], 2
+    mov     word ptr [rbp-14], 0x2923
+    mov     dword ptr [rbp-12], 0x1f02A8C0
+    lea     rsi, [rbp-0x10]  # addr
+    mov     edx, 0x10        # len
+    mov     edi, [r15 - 0x218] # fd
+    call    [r15 - 0x198] #connect
+    test    eax, eax
     js     result_error
 
 
-doprinttext pttextout3 "solved everything\n"
+dosendtext pttextout3 "[rbp-0x428]" "everything started, waiting instructions\n"
+
+#close socket
+    mov     edi, [r15 - 0x218] # fd
+    mov     eax, 0
+    call    [r15 - 0x200] #_close
+    mov     dword ptr [rbp-0x42C], 0
 
 #call testcall
-call connect_and_send
+#call connect_and_send
 
 #mov rax, qword ptr [rbp - 0x178]
-doprinttext pttextout_got_socket "connection finished\n"
+#doprinttext pttextout_got_socket "connection finished\n"
 
 #final stuff
 jmp result_sucess

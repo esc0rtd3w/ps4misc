@@ -63,6 +63,14 @@ ps4RelocPayload:
 call inputdata
 .ascii "USER_INPUT_DATA"
 .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+.byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 inputdata:
 pop rax
 
@@ -116,11 +124,6 @@ push rbp
 mov rbp, rsp
 sub rsp, 0x400
 
-mov r15, rbp
-
-mov rax, qword ptr [rax]
-mov qword ptr [rbp - 0x180],  rax
-
 movdqu xmmword ptr [rbp - 0x10], xmm7
 movdqu xmmword ptr [rbp - 0x20], xmm6
 movdqu xmmword ptr [rbp - 0x30], xmm5
@@ -143,6 +146,12 @@ mov qword ptr [rbp - 0x138],  rdx
 mov qword ptr [rbp - 0x140],  rsi
 mov qword ptr [rbp - 0x148],  rdi
 mov qword ptr [rbp - 0x150],  rbx
+
+mov rbx, qword ptr [rax]
+mov qword ptr [rbp - 0x180],  rbx
+
+mov r15, rbp
+mov r14, rax
 
 #here we do something, really safe (?)
 #160 = "libkernel.sprx"
@@ -182,9 +191,7 @@ resolvefunc read "[rbp - 0x208]"
 resolvefunc write "[rbp - 0x210]"
 #0x218 socket fd
 resolvefunc sceKernelSpawn "[rbp - 0x220]"
-# resolvefunc fork "[rbp - 0x228]"
-# resolvefunc rfork "[rbp - 0x230]"
-# resolvefunc execve "[rbp - 0x238]"
+resolvefunc sceKernelStat "[rbp - 0x228]"
 
 #socket
     mov     edx, 0          # protocol
@@ -212,22 +219,71 @@ resolvefunc sceKernelSpawn "[rbp - 0x220]"
     test    eax, eax
     js     result_error
 
+#set debug var with malloc
+#set stub as next func
+    # call nextstubmarker
+    # jmp stage2
+    # nextstubmarker:
+    # pop rax
+    # mov rcx, [r14 + 8]
+    # mov [rcx], rax
 
-#dosendtext pttextout3 "everything started, waiting instructions\n"
+dosendtext pttextout31 "everything started, waiting instructions\n"
 
+# resolvefunc exit "[rbp - 0x228]"
 
-#send 200 bytes of the resolved imports
-    lea rsi, [rbp - 0x220]
-    mov edx, 200
+# dosendtext pttextout310 "exit resolved\n"
 
-    mov     edi, [r15 - 0x218] # fd
-    mov     eax, 0
-    call    [r15 - 0x210] #_write
+resolvefunc fork "[rbp - 0x220]"
+
+dosendtext pttextout311 "fork resolved\n"
+
+resolvefunc execve "[rbp - 0x240]"
+
+dosendtext pttextout312 "execve resolved\n"
+
+#fork
+call [rbp - 0x220]
+test eax, eax
+jnz checkforkerror
+
+dosendtext pttextout32 "i'm a slave!\n"
+
+#exit syscall
+mov rdi, 0
+mov rax, 1
+syscall
+
+checkforkerror:
+test eax, eax
+jns fork_ok
+
+dosendtext pttextout33 "fork error!\n"
+jmp result_error
+
+fork_ok:
+dosendtext pttextout34 "fork ok!\n"
+
+# #send 200 bytes of the resolved imports
+#     lea rsi, [rbp - 0x400]
+#     mov edx, 0x400
+
+#     mov     edi, [r15 - 0x218] # fd
+#     mov     eax, 0
+#     call    [r15 - 0x210] #_write
+
+# #send the import table
+#     mov rsi, [r14 + 8]
+#     mov edx, 10032
+
+#     mov     edi, [r15 - 0x218] # fd
+#     mov     eax, 0
+#     call    [r15 - 0x210] #_write
 
 #close socket
-    mov     edi, [r15 - 0x218] # fd
-    mov     eax, 0
-    call    [r15 - 0x200] #_close
+    # mov     edi, [r15 - 0x218] # fd
+    # mov     eax, 0
+    # call    [r15 - 0x200] #_close
 
 #call testcall
 #call connect_and_send
@@ -240,9 +296,11 @@ resolvefunc sceKernelSpawn "[rbp - 0x220]"
 jmp result_sucess
 
 result_error:
-mov rax, -1
+
 
 result_sucess:
+
+mov rax, 0
 
 mov r15, qword ptr [rbp - 0x90]
 mov r14, qword ptr [rbp - 0x98]
@@ -304,6 +362,9 @@ _strlen_null:
   mov   rax, rcx       # rcx = the length (put in rax)
   pop   rcx            # restore rcx
   ret                  # get out
+
+stage2:
+    ret
 
 .ascii "PAYLOADENDSHERE\n"
 extern:

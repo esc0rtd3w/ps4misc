@@ -3,12 +3,53 @@
 .type ps4RelocPayload, @function
 .intel_syntax
 
+.macro resolvefunc fname dest
+    call \fname\()_definition
+    .asciz "\fname\()"
+    \fname\()_definition:
+    pop rax
+    mov qword ptr [rbp - 0x170], rax
+    lea rax, qword ptr \dest\()
+    mov rsi, qword ptr [rbp - 0x170]
+    mov rdi, qword ptr [rbp - 0x168]
+
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rax #dest
+    mov rsi, rsi #function name
+    mov rdi, rdi #lib addr
+    mov rax, 0x24f
+    syscall
+
+    test eax, eax
+    jnz result_error
+
+.endm
+
+.macro doprinttext labeldef text
+    call \labeldef\()_definition
+    .asciz "\text\()"
+    \labeldef\()_definition:
+    pop rdx
+
+    mov rdi, rdx
+    call _strlen
+
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rdx #arg2
+    mov rsi, 1 #arg1 stdout
+    mov rdi, 4 #syscall
+    mov rax, 0
+    syscall
+.endm
+
 ps4RelocPayload:
 
 #alloc some stack space for outputs?
 push rbp
 mov rbp, rsp
-sub rsp, 0x200
+sub rsp, 0x400
 
 movdqu xmmword ptr [rbp - 0x10], xmm7
 movdqu xmmword ptr [rbp - 0x20], xmm6
@@ -33,62 +74,66 @@ mov qword ptr [rbp - 0x140],  rsi
 mov qword ptr [rbp - 0x148],  rdi
 mov qword ptr [rbp - 0x150],  rbx
 
+mov r15, rbp
+
 #here we do something, really safe (?)
 #160 = "libkernel.sprx"
 #168 = libkernel.sprx solved module addr
 #170 = "sceKernelLoadStartModule"
 #178 = function ptr
+#180 = ?
 
-call name1
-.ascii "libkernel.sprx"
-.byte 0
-name1:
-pop rax
-mov qword ptr [rbp - 0x160], rax
+doprinttext pttextout1 "starting...\n"
 
-call name2
-.ascii "sceKernelLoadStartModule"
-.byte 0
-name2:
-pop rax
-mov qword ptr [rbp - 0x170], rax #store whatever func
 
-call testcall
+# ps4StubResolveSystemCall(594, "libkernel.sprx", 0, &outaddr_kernelbase, 0)#
+    lea rax, qword ptr [rbp - 0x168] #destination
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rax #arg2
+    mov rsi, 0 #arg1 stdout
 
-mov dword ptr [rbp - 0x168], 0xc0fec0fe
+    call name1
+    .asciz "libkernel.sprx"
+    name1:
+    pop rdi
 
-# ps4StubResolveSystemCall(594, "libkernel.sprx", 0, &outaddr_kernelbase, 0);
-lea rax, qword ptr [rbp - 0x168]
+    mov rdi, rdi
+    mov rax, 594
+    syscall
 
-mov rcx, rax #arg3 
-mov r10, rax #arg3 
-mov rdx, rax #arg2
-mov rsi, 0 #arg1 stdout
-mov rdi, qword ptr [rbp - 0x160] #syscall
-mov rax, 594
-syscall
+    #if eax != 0, error
+    test eax, eax
+    jnz result_error
 
-#if eax != 0, error
-test eax, eax
-jnz result_error
+doprinttext pttextout12 "starting 2...\n"
 
-# 591, module_addr, name, 0, &outaddr
-lea rax, qword ptr [rbp - 0x178]
 
-mov rcx, rax #arg3 
-mov r10, rax #arg3 
-mov rdx, rax
-mov rsi, qword ptr [rbp - 0x170]
-mov rdi, qword ptr [rbp - 0x168] #syscall
-mov rax, 0x24f
-syscall
+resolvefunc sceKernelLoadStartModule "[rbp - 0x178]"
+resolvefunc socket "[rbp - 0x190]"
+resolvefunc connect "[rbp - 0x198]"
+resolvefunc close "[rbp - 0x200]"
+resolvefunc read "[rbp - 0x208]"
+resolvefunc write "[rbp - 0x210]"
 
-test eax, eax
-jnz result_error
+#socket
+    mov     edx, 0          # protocol
+    mov     esi, 1          # type
+    mov     edi, 2          # domain
+    call    [r15 - 0x190] #socket
+
+    mov     [rbp-0x428], eax
+    cmp     dword ptr [rbp-0x428], 0
+    js     result_error
+
+
+doprinttext pttextout3 "solved everything\n"
 
 #call testcall
+call connect_and_send
 
-mov rax, qword ptr [rbp - 0x178]
+#mov rax, qword ptr [rbp - 0x178]
+doprinttext pttextout_got_socket "connection finished\n"
 
 #final stuff
 jmp result_sucess
@@ -144,7 +189,158 @@ testcall:
     # mov r11, qword ptr [r11]
     # call r11
 
+#arguments rdi = name, rax = dest
+solvelib:
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rax #arg2
+    mov rsi, 0 #arg1 stdout
+    mov rdi, rdi
+    mov rax, 594
+    syscall
+    ret
+
+solvename:
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rax #dest
+    mov rsi, rsi #function name
+    mov rdi, rdi #lib addr
+    mov rax, 0x24f
+    syscall
+    ret
+
+connect_and_send:
+                 push    rbp
+                 mov     rbp, rsp
+                 sub     rsp, 0x430
+                 mov     edx, 0          # protocol
+                 mov     esi, 1          # type
+                 mov     edi, 2          # domain
+                 call    [r15 - 0x190] #socket
+
+                 mov     [rbp-0x428], eax
+                 cmp     dword ptr [rbp-0x428], 0
+                 jns     loc_4007B7
+
+
+                 #do some error msg
+                 #mov     edi, offset s   # "socket"
+                 #call    _perror
+
+                 mov     dword ptr [rbp-0x42c], 1
+                 jmp     connect_return_400875
+ # ---------------------------------------------------------------------------
+
+ loc_4007B7:
+                #doprinttext pttextout_got_socket "got socket\n"
+
+
+                 lea     rdi, [rbp+0x10]
+                 mov qword ptr [rdi], 0
+                 mov qword ptr [rdi+8], 0
+                 # mov     esi, 0x10        # n
+                 # call    _bzero #bzero?
+
+                 mov     byte ptr [rbp-15], 2
+                 mov     word ptr [rbp-14], 0x2923
+                 mov     dword ptr [rbp-12], 0x1f02A8C0
+                 lea     rsi, [rbp-0x10]  # addr
+                 mov     edx, 0x10        # len
+                 mov     edi, [rbp-0x428] # fd
+                 call    [r15 - 0x198] #connect
+                 test    eax, eax
+                 jns     after_connect_ok
+
+                 #another error msg
+                 #mov     edi, offset aConnect # "connect"
+                 #call    _perror
+
+                 mov     edi, [rbp-0x428] # fd
+                 mov     eax, 0
+                 call    [r15 - 0x200] # _close
+                 mov     dword ptr [rbp-0x42C], 2
+                 jmp     connect_return_400875
+ # ---------------------------------------------------------------------------
+
+ after_connect_ok:
+                 #doprinttext pttextout_connect_ok "connect ok\n"
+
+                 mov byte ptr [rbp-0x420], 'h'
+                 mov byte ptr [rbp-0x41f], 'e'
+                 mov byte ptr [rbp-0x41e], 'l'
+                 mov byte ptr [rbp-0x41d], 'l'
+                 mov byte ptr [rbp-0x41c], 'x'
+                 mov dword ptr [rbp-0x424], 5
+
+ loc_400814:                             
+                 lea     rsi, [rbp-0x420] # buf
+                 mov     edx, [rbp-0x424] # n
+
+                 # call sendtext
+                 # .asciz "helloworld"
+                 # sendtext:
+                 # pop rsi
+                 # mov rdi, rsi
+                 # call _strlen
+                 # mov edx, eax
+
+                 mov     edi, [rbp-0x428] # fd
+                 mov     eax, 0
+                 call    [r15 - 0x210] #_write
+
+ do_we_read:                             
+                 lea     rsi, [rbp-0x420] # buf
+                 mov     edx, 0x400       # nbytes
+                 mov     edi, [rbp-0x428] # fd
+                 mov     eax, 0
+                 call    [r15 - 0x208] #_read
+
+                 mov     [rbp-0x424], eax
+                 cmp     dword ptr [rbp-0x424], 0
+                 #loop?
+                 #jg      loc_400814 
+
+dont_read:
+                 mov     edi, [rbp-0x428] # fd
+                 mov     eax, 0
+                 call    [r15 - 0x200] #_close
+                 mov     dword ptr [rbp-0x42C], 0
+
+ connect_return_400875:                             
+                                         
+                 mov     eax, [rbp-0x42C]
+                 leave
+                 ret
+
+
+
+
+_strlen:
+  push  rcx            # save and clear out counter
+  xor   rcx, rcx
+
+_strlen_next:
+
+  cmp   byte ptr [rdi], 0  # null byte yet?
+  jz    _strlen_null   # yes, get out
+
+  inc   rcx            # char is ok, count it
+  inc   rdi            # move to next char
+  jmp   _strlen_next   # process again
+
+_strlen_null:
+
+  mov   rax, rcx       # rcx = the length (put in rax)
+
+  pop   rcx            # restore rcx
+  ret                  # get out
+
+
+
+
 .ascii "PAYLOADENDSHERE\n"
+
 
 .att_syntax
 

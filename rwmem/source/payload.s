@@ -10,13 +10,59 @@ call inputdata
 .byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 inputdata:
 pop rax
-mov rax, qword ptr [rax]
-mov [rax], rdi
+
+
+
+
+
+# first section should check if has to run or return
+# to run, at leats 1 thread gets the userdata marked as c0fec0feh
+
+# push rax
+
+
+# mov dword ptr [rax], 0xc0fe1338
+
+# mov eax, dword ptr [rax]
+
+# test eax, eax
+# jz gw_continue
+
+# #exit path, already run once(or more)
+# pop rax
+
+# mov rax, 0
+# ret
+
+
+# gw_continue:
+# pop rax
+# mov dword ptr [rax], 0xc0fe1337
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #alloc some stack space for outputs?
 push rbp
 mov rbp, rsp
-sub rsp, 0x200
+sub rsp, 0x400
+
+mov rax, qword ptr [rax]
+mov qword ptr [rbp - 0x180],  rax
 
 movdqu xmmword ptr [rbp - 0x10], xmm7
 movdqu xmmword ptr [rbp - 0x20], xmm6
@@ -46,6 +92,7 @@ mov qword ptr [rbp - 0x150],  rbx
 #168 = libkernel.sprx solved module addr
 #170 = "sceKernelLoadStartModule"
 #178 = function ptr
+#180 = ptr to data sector
 
 call name1
 .ascii "libkernel.sprx"
@@ -55,7 +102,11 @@ pop rax
 mov qword ptr [rbp - 0x160], rax
 
 call name2
+.ascii "sceKernelSpawn"
+.byte 0
 .ascii "sceKernelLoadStartModule"
+.byte 0
+.ascii "malloc"
 .byte 0
 name2:
 pop rax
@@ -63,9 +114,9 @@ mov qword ptr [rbp - 0x170], rax #store whatever func
 
 call testcall
 
-mov dword ptr [rbp - 0x168], 0xc0fec0fe
+mov dword ptr [rbp - 0x168], 0
 
-# ps4StubResolveSystemCall(594, "libkernel.sprx", 0, &outaddr_kernelbase, 0);
+# ps4StubResolveSystemCall(594, "libkernel.sprx", 0, &outaddr_kernelbase, 0)#
 lea rax, qword ptr [rbp - 0x168]
 
 mov rcx, rax #arg3 
@@ -94,9 +145,24 @@ syscall
 test eax, eax
 jnz result_error
 
-#call testcall
+original:
 
+call clientname
+.ascii "/mnt/usb0/client"
+.byte 0
+clientname:
+pop rdx #filename goes to rdx
+
+lea rdi, [rbp - 0x190] #seems something goes out? or in struct
+xor esi, esi
+xor rcx, rcx
 mov rax, qword ptr [rbp - 0x178]
+call rax
+
+mov rcx, qword ptr [rbp - 0x180]
+mov qword ptr [rcx+4], rax
+
+#connect a socket, send, close
 
 #final stuff
 jmp result_sucess

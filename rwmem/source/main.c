@@ -317,6 +317,8 @@ int main(int argc, char **argv) {
         
 
         printf("useless zone: %x payloadsize: %d datadest: %x\n", useless_zone, writesize, start[1]);
+
+        //write_process_form_sys(pid, start[1], "\x00\x00\x00\x00", 4); //useless zone(exceptions list), has some extra bytes
         
         write_process_form_sys(pid, useless_zone, writebuff, writesize); //useless zone(exceptions list), has some extra bytes
 

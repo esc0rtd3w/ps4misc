@@ -45,25 +45,32 @@ int main(int argc, char *argv[]) {
     // printf("the ptr: %016llX\n", ret);
     // ps4StandardIoPrintHexDump(ret, 0x100);
 
-    //int f = fork();
-    //printf("fork result: %d\n", f);
-    //if (f == 0) {
+    //sleep(1);
 
-    uint64_t (*functionPtr)() = &ps4RelocPayload;
+    // int f = fork();
+    // if (f == 0) {
+    //     printf("fork result: %d\n", f);
 
-    // uint64_t ret3 = sceKernelLoadStartModule("libkernel.sprx", 0, NULL, 0, 0, 0);
-    // printf("that lib? %016llX\n", ret3);
+        uint64_t (*functionPtr)() = &ps4RelocPayload;
 
-    // printf("sceKernelLoadStartModule %016llX\n", ps4StubResolve_ps4StubResolveLoadStartModule);
+        FILE *f = fopen("/mnt/usb0/client", "r");
+        write(f, "hi", 1);
+        printf("opening file: %016llX\n", f);
+        close(f);
 
-    uint64_t payloadret = functionPtr();
-    printf("after func call\n");
-    printf("ret %016llX\n", payloadret);
+        // uint64_t ret3 = sceKernelLoadStartModule("libkernel.sprx", 0, NULL, 0, 0, 0);
+        // printf("that lib? %016llX\n", ret3);
 
-    ps4StandardIoPrintHexDump(payloadret, 0x100);
+        // printf("sceKernelLoadStartModule %016llX\n", ps4StubResolve_ps4StubResolveLoadStartModule);
 
-        //exit(0);
-    //}
+        uint64_t payloadret = functionPtr();
+        printf("after func call\n");
+        printf("ret %016llX\n", payloadret);
+
+        // ps4StandardIoPrintHexDump(payloadret, 0x100);
+
+    //     exit(0);
+    // }
 
     return EXIT_SUCCESS;
 }

@@ -142,11 +142,6 @@ jmp result_sucess
 
 first_run:
 
-
-
-mov rbx, qword ptr [r14]
-mov qword ptr [rbp - 0x180],  rbx
-
 mov r15, rbp
 
 #here we do something, really safe (?)
@@ -154,7 +149,6 @@ mov r15, rbp
 #168 = libkernel.sprx solved module addr
 #170 = "sceKernelLoadStartModule"
 #178 = function ptr
-#180 = ptr to data sector
 
 
 # ps4StubResolveSystemCall(594, "libkernel.sprx", 0, &outaddr_kernelbase, 0)#
@@ -192,27 +186,9 @@ resolvefunc fork "[rbp - 0x230]"
 resolvefunc execve "[rbp - 0x238]"
 resolvefunc dup2 "[rbp - 0x240]"
 
-    lea rax, qword ptr [rbp - 0x168] #destination
-    mov rcx, rax #arg3 
-    mov r10, rax #arg3 
-    mov rdx, rax #arg2
-    mov rsi, 0 #arg1 stdout
-
-    call libSceLibcInternal_name
-    .asciz "libSceLibcInternal.sprx"
-    libSceLibcInternal_name:
-    pop rdi
-
-    mov rdi, rdi
-    mov rax, 594
-    syscall
-
-resolvefunc printf "[rbp - 0x248]"
-
-
 #socket
     mov     edx, 0          # protocol
-    mov     esi, 1          # type, TCP = 1 UDP = 2
+    mov     esi, 2          # type, TCP = 1 UDP = 2
     mov     edi, 2          # domain
     call    [r15 - 0x190] #socket
 
@@ -259,21 +235,21 @@ dosendtext pttextout31 "everything started, waiting instructions\n"
 
 
 #fork
-call [rbp - 0x230]
-test eax, eax
-jnz checkforkerror
+    # call [rbp - 0x230]
+    # test eax, eax
+    # jnz checkforkerror
 
-jmp slave_thread
+    # jmp slave_thread
 
-checkforkerror:
-test eax, eax
-jns fork_ok
+    # checkforkerror:
+    # test eax, eax
+    # jns fork_ok
 
-dosendtext pttextout33 "fork error!\n"
-jmp result_error
+    # dosendtext pttextout33 "fork error!\n"
+    # jmp result_error
 
-fork_ok:
-dosendtext pttextout34 "fork ok!\n"
+    # fork_ok:
+    # dosendtext pttextout34 "fork ok!\n"
 
 
 
@@ -329,6 +305,25 @@ result_sucess:
 test eax,eax
 jnz skip_printf
 
+#the lib has to be resolved on each call to the logger
+#as the context gets lost
+    lea rax, qword ptr [rbp - 0x168] #destination
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rax #arg2
+    mov rsi, 0 #arg1 stdout
+
+    call libSceLibcInternal_name
+    .asciz "libSceLibcInternal.sprx"
+    libSceLibcInternal_name:
+    pop rdi
+
+    mov rdi, rdi
+    mov rax, 594
+    syscall
+
+    resolvefunc printf "[r15 - 0x248]"
+
 #printf the caller address
     call somestr
     .asciz "%016llX\n"
@@ -339,7 +334,7 @@ jnz skip_printf
     mov rax, [r14 + 0x10]
     sub rsi, rax
 
-    call [rbp - 0x248]
+    call [r15 - 0x248]
 
 mov r15, qword ptr [rbp - 0x90]
 mov r14, qword ptr [rbp - 0x98]

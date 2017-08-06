@@ -350,10 +350,10 @@ int main(int argc, char **argv) {
         
         write_process_form_sys(pid, useless_zone, writebuff, writesize); //useless zone(exceptions list), has some extra bytes
 
+        //did work until now
         write_process_form_sys(pid, sceRifManagerEntitlementStatOnHDD, (char*)&StatEntitlement, 30);
         write_process_form_sys(pid, CheckSkuFlag, (char*)&StatEntitlement, 30);
         write_process_form_sys(pid, sceNpManagerIntGetSigninState, (char*)&StatEntitlement, 30);
-        //write_process_form_sys(pid, processCheck_unk, (char*)&StatEntitlement, 30);
         write_process_form_sys(pid, start[0] + 0xeb310, "\x90\x90\x90\x90\x90\x90", 6); //pass usb to the sandboxes
         write_process_form_sys(pid, start[0] + 0xc6899 + 3, "\xa9\xd2\x5c\x00\x49\x89\xc7\x90\x90", 9); //???
         write_process_form_sys(pid, start[0] + 0x13c281, "\xb8\x00\x00\x00\x00", 5); //null psfmountbigapphdd
@@ -362,6 +362,9 @@ int main(int argc, char **argv) {
 
         write_process_form_sys(pid, start[0] + 0x6ab81d, "/mnt/usb0/app0\x00", 15); //mount source on host
         write_process_form_sys(pid, start[0] + 0x6ab835, "/app0\x00", 6); //mount dest on jail
+
+        //not working
+        //write_process_form_sys(pid, processCheck_unk, (char*)&StatEntitlement, 30);
 
         write_process_form_sys(pid, p_tracefunc, (char*)&useless_zone, 8);
 

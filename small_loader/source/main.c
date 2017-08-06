@@ -131,7 +131,6 @@ int main(int argc, char *argv[]) {
     printf("hello world\n");
     
     list_dir("/mnt/sandbox/CUSA00001_0000/app0");
-    return 0;
 
     // cp("/data/ls", "/mnt/usb0/ls");
     // cp("/data/cat", "/mnt/usb0/cat");

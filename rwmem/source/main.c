@@ -321,7 +321,7 @@ int main(int argc, char **argv) {
         //translated positions for the patches:
 
         //relative to image
-        uint64_t text_mnt_usb0 = useless_zone + (uint64_t)msearch(ps4RelocPayload, "/mnt/sandbox/CUSA00001_0000\x00", strlen("/mnt/sandbox/CUSA00001_0000\x00") + 1) - (uint64_t)ps4RelocPayload;
+        uint64_t text_mnt_usb0 = useless_zone + (uint64_t)msearch(ps4RelocPayload, "/mnt/sandbox/CUSA00001_0004\x00", strlen("/mnt/sandbox/CUSA00001_0004\x00") + 1) - (uint64_t)ps4RelocPayload;
 
         char p[] = { 0x48, 0xb8 };
         char p2[] = { 0x48, 0x89, 0x85, 0x38, 0xf3, 0xff, 0xff ,
@@ -360,8 +360,8 @@ int main(int argc, char **argv) {
         write_process_form_sys(pid, start[0] + 0x128b43, "\x90\xe9", 2); //null psfmountbigapphdd
         write_process_form_sys(pid, start[0] + 0xe571e, "\x90\x90\x90\x90\x90\x90", 6); //nmount failed
 
-        write_process_form_sys(pid, start[0] + 0x6ab81d, "/data/app0\x00", 15); //nmount failed
-        write_process_form_sys(pid, start[0] + 0x6ab835, "/app0\x00", 6); //nmount failed
+        write_process_form_sys(pid, start[0] + 0x6ab81d, "/mnt/usb0/app0\x00", 15); //mount source on host
+        write_process_form_sys(pid, start[0] + 0x6ab835, "/app0\x00", 6); //mount dest on jail
 
         write_process_form_sys(pid, p_tracefunc, (char*)&useless_zone, 8);
 

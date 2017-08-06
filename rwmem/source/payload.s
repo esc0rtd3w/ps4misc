@@ -129,9 +129,9 @@ pop r14
 
 
 mov eax, 0x40 #initial value
-mov ebx, [r14]
+mov rbx, [r14]
 mov ecx, 0 #new value
-lock cmpxchg dword ptr [ebx], ecx
+lock cmpxchg dword ptr [rbx], ecx
 jz first_run
 
 #if the printer has been sucessfully initialized
@@ -192,9 +192,27 @@ resolvefunc fork "[rbp - 0x230]"
 resolvefunc execve "[rbp - 0x238]"
 resolvefunc dup2 "[rbp - 0x240]"
 
+    lea rax, qword ptr [rbp - 0x168] #destination
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rax #arg2
+    mov rsi, 0 #arg1 stdout
+
+    call libSceLibcInternal_name
+    .asciz "libSceLibcInternal.sprx"
+    libSceLibcInternal_name:
+    pop rdi
+
+    mov rdi, rdi
+    mov rax, 594
+    syscall
+
+resolvefunc printf "[rbp - 0x248]"
+
+
 #socket
     mov     edx, 0          # protocol
-    mov     esi, 2          # type
+    mov     esi, 1          # type, TCP = 1 UDP = 2
     mov     edi, 2          # domain
     call    [r15 - 0x190] #socket
 
@@ -260,9 +278,9 @@ dosendtext pttextout34 "fork ok!\n"
 
 
 mov eax, 0 #initial second value
-mov ebx, [r14]
+mov rbx, [r14]
 mov ecx, 1 #new value
-lock cmpxchg dword ptr [ebx], ecx
+lock cmpxchg dword ptr [rbx], ecx
 
 printf_the_stuff:
 mov rax, 0
@@ -294,6 +312,11 @@ mov rax, 0
 #mov rax, qword ptr [rbp - 0x178]
 #doprinttext pttextout_got_socket "connection finished\n"
 
+# mov rdi, [r14+0x10]
+# add rdi, 0x8925d0
+# mov rdi, [rdi]
+
+# call primitive_hexdump
 
 #final stuff
 jmp result_sucess
@@ -306,35 +329,17 @@ result_sucess:
 test eax,eax
 jnz skip_printf
 
-#solve printf
-#call printf
-    lea rax, qword ptr [rbp - 0x168] #destination
-    mov rcx, rax #arg3 
-    mov r10, rax #arg3 
-    mov rdx, rax #arg2
-    mov rsi, 0 #arg1 stdout
-
-    call libSceLibcInternal_name
-    .asciz "libSceLibcInternal.sprx"
-    libSceLibcInternal_name:
+#printf the caller address
+    call somestr
+    .asciz "%016llX\n"
+    somestr:
     pop rdi
 
-    mov rdi, rdi
-    mov rax, 594
-    syscall
+    mov rsi, [rbp + 8]
+    mov rax, [r14 + 0x10]
+    sub rsi, rax
 
-resolvefunc printf "[rbp - 0x248]"
-
-call somestr
-.asciz "%016llX\n"
-somestr:
-pop rdi
-
-mov rsi, [rbp + 8]
-mov rax, [r14 + 0x10]
-sub rsi, rax
-
-call [rbp - 0x248]
+    call [rbp - 0x248]
 
 mov r15, qword ptr [rbp - 0x90]
 mov r14, qword ptr [rbp - 0x98]
@@ -413,6 +418,41 @@ testcall:
     # call r11
 
 
+
+primitive_hexdump:
+    push rbp
+    mov rbp, rsp
+    sub rsp, 0x30
+
+    mov qword ptr [rbp - 0x20], rdi
+    mov qword ptr [rbp - 0x10], 0
+
+    primitive_hexdump_loop:
+    mov rsi, qword ptr [rbp - 0x20]
+
+    add rsi, qword ptr [rbp - 0x10]
+
+    mov cl, byte ptr [rsi]
+    mov rsi, rcx
+
+    call somestr2
+    .asciz "%02X "
+    somestr2:
+    pop rdi
+
+    call [r15 - 0x248]
+
+    mov rax, qword ptr [rbp - 0x10]
+    inc rax
+    mov qword ptr [rbp - 0x10], rax
+    cmp rax, 0x10
+    jnz primitive_hexdump_loop
+
+    mov rsp, rbp
+    pop rbp
+    ret
+
+
 _strlen:
   push  rcx            # save and clear out counter
   xor   rcx, rcx
@@ -434,6 +474,10 @@ stage2:
 slave_thread:
     dosendtext pttextout41 "i'm a slave!\n"
 
+    mov rdi, 0
+    mov rax, 1
+    syscall
+
     call params
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     params:
@@ -442,29 +486,22 @@ slave_thread:
     mov rsi, rcx
 
     call filename
-    .asciz "/mnt/usb0/CUSA00001_0000/app0/eboot.bin"
+    .asciz "/data/app0/1eboot.bin"
     filename:
     pop rdi
     call [rbp - 0x238] #execve
 
-    test eax, eax
-    jnz execve_failed
+    #if execve sucess context dissapeared
 
-    dosendtext pttextout42 "execve sucess!\n"
+    # call execvefailed_str
+    # .asciz "execve failed! %016llX\n"
+    # execvefailed_str:
+    # pop rdi
+    # mov esi, eax
+    # mov ecx, eax
 
-    jmp slave_exit
+    # call [rbp - 0x248]
 
-execve_failed:
-    dosendtext pttextout43 "execve failed!\n"
-
-
-    lea rsi, [rbp - 0x240]
-    mov [rsi], eax
-    mov edx, 4
-
-    mov     edi, [r15 - 0x218] # fd
-    mov     eax, 0
-    call    [r15 - 0x210] #_write
 
 slave_exit:
 
@@ -476,7 +513,7 @@ slave_exit:
 
 
 .asciz "$_$APP_TEXT_SECTION$_$"
-.asciz "/mnt/sandbox/CUSA00001_0000"
+.asciz "/mnt/sandbox/CUSA00001_0004"
 
 .ascii "PAYLOADENDSHERE\n"
 

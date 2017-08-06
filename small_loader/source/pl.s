@@ -137,7 +137,7 @@ resolvefunc dup2 "[rbp - 0x240]"
 
 #socket
     mov     edx, 0          # protocol
-    mov     esi, 1          # type
+    mov     esi, 2          # type
     mov     edi, 2          # domain
     call    [r15 - 0x190] #socket
 
@@ -160,11 +160,37 @@ resolvefunc dup2 "[rbp - 0x240]"
     test    eax, eax
     js     result_error
 
+#dup2 socket to stdout
     mov rdi, [r15 - 0x218]
     mov rsi, 1 #STDOUT_FILENO
     call [rbp - 0x240]
 
     doprinttext pttextout_got_socket2 "printed\n"
+
+    lea rax, qword ptr [rbp - 0x168] #destination
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rax #arg2
+    mov rsi, 0 #arg1 stdout
+
+    call libSceLibcInternal_name
+    .asciz "libSceLibcInternal.sprx"
+    libSceLibcInternal_name:
+    pop rdi
+
+    mov rdi, rdi
+    mov rax, 594
+    syscall
+
+resolvefunc printf "[rbp - 0x248]"
+
+    doprinttext pttextout_got_socket3 "printf resolved\n"
+
+call aprintfforu
+.asciz "aprintf for u %X %X %X\n"
+aprintfforu:
+pop rdi
+call [rbp - 0x248]
 
 
     lea rsi, [rbp - 0x238]

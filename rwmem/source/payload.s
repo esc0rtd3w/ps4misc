@@ -127,11 +127,16 @@ inputdata:
 pop r14
 
 
+
 mov eax, 0x40 #initial value
 mov ebx, [r14]
-mov ecx, 0
+mov ecx, 0 #new value
 lock cmpxchg dword ptr [ebx], ecx
 jz first_run
+
+#if the printer has been sucessfully initialized
+    test eax, eax
+    jnz printf_the_stuff
 
 jmp result_sucess
 
@@ -183,11 +188,13 @@ resolvefunc write "[rbp - 0x210]"
 #0x218 socket fd
 resolvefunc sceKernelSpawn "[rbp - 0x220]"
 resolvefunc sceKernelStat "[rbp - 0x228]"
+resolvefunc fork "[rbp - 0x230]"
+resolvefunc execve "[rbp - 0x238]"
 resolvefunc dup2 "[rbp - 0x240]"
 
 #socket
     mov     edx, 0          # protocol
-    mov     esi, 1          # type
+    mov     esi, 2          # type
     mov     edi, 2          # domain
     call    [r15 - 0x190] #socket
 
@@ -202,7 +209,7 @@ resolvefunc dup2 "[rbp - 0x240]"
 
     mov     byte ptr [rbp-15], 2
     mov     word ptr [rbp-14], 0x2923
-    mov     dword ptr [rbp-12], 0x1f02A8C0
+    mov     dword ptr [rbp-12], 0x2702A8C0
     lea     rsi, [rbp-0x10]  # addr
     mov     edx, 0x10        # len
     mov     edi, [r15 - 0x218] # fd
@@ -210,6 +217,12 @@ resolvefunc dup2 "[rbp - 0x240]"
 
     test    eax, eax
     js     result_error
+
+
+#dup2 the socket to STDOUT
+    mov rdi, [r15 - 0x218]
+    mov rsi, 1 #STDOUT_FILENO
+    call [rbp - 0x240]
 
 #set debug var with malloc
 #set stub as next func
@@ -226,13 +239,6 @@ dosendtext pttextout31 "everything started, waiting instructions\n"
 
 # dosendtext pttextout310 "exit resolved\n"
 
-resolvefunc fork "[rbp - 0x230]"
-
-dosendtext pttextout311 "fork resolved\n"
-
-resolvefunc execve "[rbp - 0x238]"
-
-dosendtext pttextout312 "execve resolved\n"
 
 #fork
 call [rbp - 0x230]
@@ -250,6 +256,16 @@ jmp result_error
 
 fork_ok:
 dosendtext pttextout34 "fork ok!\n"
+
+
+
+mov eax, 0 #initial second value
+mov ebx, [r14]
+mov ecx, 1 #new value
+lock cmpxchg dword ptr [ebx], ecx
+
+printf_the_stuff:
+mov rax, 0
 
 # #send 200 bytes of the resolved imports
 #     lea rsi, [rbp - 0x400]
@@ -283,9 +299,71 @@ dosendtext pttextout34 "fork ok!\n"
 jmp result_sucess
 
 result_error:
-
+mov eax, 0xffffffff
 
 result_sucess:
+
+test eax,eax
+jnz skip_printf
+
+#solve printf
+#call printf
+    lea rax, qword ptr [rbp - 0x168] #destination
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, rax #arg2
+    mov rsi, 0 #arg1 stdout
+
+    call libSceLibcInternal_name
+    .asciz "libSceLibcInternal.sprx"
+    libSceLibcInternal_name:
+    pop rdi
+
+    mov rdi, rdi
+    mov rax, 594
+    syscall
+
+resolvefunc printf "[rbp - 0x248]"
+
+call somestr
+.asciz "%016llX\n"
+somestr:
+pop rdi
+
+mov rsi, [rbp + 8]
+mov rax, [r14 + 0x10]
+sub rsi, rax
+
+call [rbp - 0x248]
+
+mov r15, qword ptr [rbp - 0x90]
+mov r14, qword ptr [rbp - 0x98]
+mov r13, qword ptr [rbp - 0x100]
+mov r12, qword ptr [rbp - 0x108]
+mov r11, qword ptr [rbp - 0x110]
+mov r10, qword ptr [rbp - 0x118]
+mov r9, qword ptr [rbp - 0x120]
+mov r8, qword ptr [rbp - 0x128]
+mov rcx, qword ptr [rbp - 0x130]
+mov rdx, qword ptr [rbp - 0x138]
+mov rsi, qword ptr [rbp - 0x140]
+mov rdi, qword ptr [rbp - 0x148]
+mov rbx, qword ptr [rbp - 0x150]
+
+movdqu xmm7, xmmword ptr [rbp - 0x10]
+movdqu xmm6, xmmword ptr [rbp - 0x20]
+movdqu xmm5, xmmword ptr [rbp - 0x30] 
+movdqu xmm4, xmmword ptr [rbp - 0x40] 
+movdqu xmm3, xmmword ptr [rbp - 0x50] 
+movdqu xmm2, xmmword ptr [rbp - 0x60] 
+movdqu xmm1, xmmword ptr [rbp - 0x70] 
+movdqu xmm0, xmmword ptr [rbp - 0x80] 
+
+#do printf
+# #send the import table
+call [rbp - 0x248]
+
+skip_printf:
 
 mov r15, qword ptr [rbp - 0x90]
 mov r14, qword ptr [rbp - 0x98]
@@ -314,7 +392,6 @@ mov rsp, rbp
 pop rbp
 
 mov rax, 0
-
 ret
 
 testcall:
@@ -357,10 +434,6 @@ stage2:
 slave_thread:
     dosendtext pttextout41 "i'm a slave!\n"
 
-    mov rdi, [r15 - 0x218]
-    mov rsi, 1 #STDOUT_FILENO
-    call [rbp - 0x240]
-
     call params
     .byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     params:
@@ -369,7 +442,7 @@ slave_thread:
     mov rsi, rcx
 
     call filename
-    .asciz "/data/ls"
+    .asciz "/mnt/usb0/CUSA00001_0000/app0/eboot.bin"
     filename:
     pop rdi
     call [rbp - 0x238] #execve
@@ -402,9 +475,10 @@ slave_exit:
 
 
 
+.asciz "$_$APP_TEXT_SECTION$_$"
+.asciz "/mnt/sandbox/CUSA00001_0000"
+
 .ascii "PAYLOADENDSHERE\n"
-extern:
-.ascii "USER_INPUT_STUFF\n"
 
 .att_syntax
 

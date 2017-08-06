@@ -1,5 +1,7 @@
 #define _XOPEN_SOURCE
 
+#include <dirent.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,10 +31,95 @@
 
 #include <sys/stat.h>
 
+
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <string.h>
+#include <errno.h>
+/* "readdir" etc. are defined here. */
+/* limits.h defines "PATH_MAX". */
+//#include <limits.h>
+#define PATH_MAX 512
+
+/* List the files in "dir_name". */
+
+static void list_dir (const char * dir_name)
+{
+    DIR * d;
+
+    /* Open the directory specified by "dir_name". */
+
+    d = opendir (dir_name);
+
+    /* Check it was opened. */
+    if (! d) {
+        printf ("Cannot open directory '%s'\n",
+                 dir_name);
+        return ;
+    }
+    while (1) {
+        struct dirent * entry;
+        const char * d_name;
+
+        /* "Readdir" gets subsequent entries from "d". */
+        entry = readdir (d);
+        if (! entry) {
+            /* There are no more entries in this directory, so break
+               out of the while loop. */
+            break;
+        }
+        d_name = entry->d_name;
+        /* Print the name of the file and directory. */
+    printf ("%s/%s\n", dir_name, d_name);
+
+#if 0
+    /* If you don't want to print the directories, use the
+       following line: */
+
+        if (! (entry->d_type & DT_DIR)) {
+        printf ("%s/%s\n", dir_name, d_name);
+    }
+
+#endif /* 0 */
+
+
+        if (entry->d_type & DT_DIR) {
+
+            /* Check that the directory is not "d" or d's parent. */
+            
+            if (strcmp (d_name, "..") != 0 &&
+                strcmp (d_name, ".") != 0) {
+                int path_length;
+                char path[PATH_MAX];
+ 
+                path_length = snprintf (path, PATH_MAX,
+                                        "%s/%s", dir_name, d_name);
+                printf ("%s\n", path);
+                if (path_length >= PATH_MAX) {
+                    printf ("Path length has got too long.\n");
+                    return ;
+                }
+                /* Recursively call "list_dir" with the new path. */
+                //list_dir (path);
+            }
+    }
+    }
+    /* After going through all the entries, close the directory. */
+    if (closedir (d)) {
+        printf ("Could not close '%s'\n",
+                 dir_name);
+        return ;
+    }
+}
+
+
 uint64_t ps4RelocPayload();
 uint64_t ps4StubResolve_ps4StubResolveLoadStartModule;
 
 int main(int argc, char *argv[]) {
+
 
     int64_t jret;
     printf("getuid() : %d\n", getuid());
@@ -42,11 +129,14 @@ int main(int argc, char *argv[]) {
     }
 
     printf("hello world\n");
+    
+    list_dir("/mnt/sandbox/CUSA00001_0000/app0");
+    return 0;
 
-    cp("/data/ls", "/mnt/usb0/ls");
-    cp("/data/cat", "/mnt/usb0/cat");
-    cp("/data/sh1", "/mnt/usb0/sh");
-    cp("/data/client", "/mnt/usb0/client");
+    // cp("/data/ls", "/mnt/usb0/ls");
+    // cp("/data/cat", "/mnt/usb0/cat");
+    // cp("/data/sh1", "/mnt/usb0/sh");
+    // cp("/data/client", "/mnt/usb0/client");
 
     // uint64_t ret = *(uint64_t*)0x93a4ffff8;
     // printf("the ptr: %016llX\n", ret);
@@ -150,3 +240,6 @@ int cp(const char *to, const char *from)
     errno = saved_errno;
     return -1;
 }
+
+
+

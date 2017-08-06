@@ -106,7 +106,8 @@ mov qword ptr [rbp - 0x140],  rsi
 mov qword ptr [rbp - 0x148],  rdi
 mov qword ptr [rbp - 0x150],  rbx
 
-
+#to use the stack base as symbol table
+mov r15, rbp
 
 
 
@@ -141,8 +142,6 @@ jz first_run
 jmp result_sucess
 
 first_run:
-
-mov r15, rbp
 
 #here we do something, really safe (?)
 #160 = "libkernel.sprx"
@@ -322,7 +321,7 @@ jnz skip_printf
     mov rax, 594
     syscall
 
-    resolvefunc printf "[r15 - 0x248]"
+    resolvefunc printf "[rbp - 0x248]"
 
 #printf the caller address
     call somestr
@@ -334,7 +333,7 @@ jnz skip_printf
     mov rax, [r14 + 0x10]
     sub rsi, rax
 
-    call [r15 - 0x248]
+    call [rbp - 0x248]
 
 mov r15, qword ptr [rbp - 0x90]
 mov r14, qword ptr [rbp - 0x98]

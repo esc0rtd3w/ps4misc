@@ -43,6 +43,12 @@
 int mysocket;
 
 
+//59  AUE_EXECVE  STD { int execve(char *fname, char **argv, char **envv); }
+//74  AUE_MPROTECT    STD { int mprotect(void *addr, size_t len, int prot); }
+int syscall2(int rsi, ...);
+__asm__("syscall2: mov $0, %rax \n syscall\n ret");
+
+
 int main(int argc, char **argv)
 {
     char* args[10];
@@ -60,14 +66,23 @@ int main(int argc, char **argv)
         printf("jailbreak!!\n");
     }
 
-    f = fork();
-    printf("fork: %d\n", f);
+    // f = fork();
 
-    if (f == 0)
-    {
-        e = execv("/mnt/usb0/sh", args);
+    // if (f == 0)
+    // {
+        printf("fork: %d\n", f);
+
+        e = syscall2(4, 1, "/data/ls", 8); //R/W
+
+        e = syscall2(74, "/data/sh", 0x4000, 3); //R/W
+        printf("mprotect: %d\n", e);
+
+        e = syscall2(59, "/data/rcved", args);
         printf("execve: %d\n", e);
-    }
+        //e = execv("/mnt/usb0/sh", args);
+
+    //     __asm__("mov $1, %rax \n mov $0, %rdi \n syscall");
+    // }
     
     return EXIT_SUCCESS;
 }

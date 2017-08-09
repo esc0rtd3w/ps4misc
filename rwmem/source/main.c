@@ -21,9 +21,12 @@
 
 #include <ps4/standard_io.h>
 #include <ps4/kernel.h>
+#include <ps4/socket.h>
 
 
 #include "kmain.h"
+
+#include "elfloader.h"
 
 #define DEBUG_SIZE 0x1000
 
@@ -197,6 +200,42 @@ int StatEntitlement()
 
 void ps4RelocPayload();
 
+#define O_RDONLY 0
+
+void printkvm(struct kinfo_vmentry * kvm){
+    printf( "[-]type is:%X\n"
+                    "[-]offset is:0x%016llX\n"
+                    "[-]fileid is:0x%016llX\n"
+                    "[-]fsid is:0x%016llX\n"
+                    "[-]flags are:%X\n"
+                    "[-]resident page number:%X\n"
+                    "[-]# of priv pages:%X\n"
+                    "[-]proc bitmask:%X\n"
+                    "[-]vm obj ref count:%X\n"
+                    "[-]vm shadow count:%X\n"
+                    "[-]vnode type:%X\n"
+                    "[-]file size:0x%016llX\n"
+                    "[-]device id:0x%016llX\n"
+                    "[-]file mode:0x%016llX\n"
+                    "[-]kve status:0x%016llX\n"
+
+                    ,kvm->kve_type
+                    ,kvm->kve_offset
+                    ,kvm->kve_vn_fileid
+                    ,kvm->kve_vn_fsid
+                    ,kvm->kve_flags
+                    ,kvm->kve_resident
+                    ,kvm->kve_private_resident
+                    ,kvm->kve_protection
+                    ,kvm->kve_ref_count
+                    ,kvm->kve_shadow_count
+                    ,kvm->kve_vn_type
+                    ,kvm->kve_vn_size
+                    ,kvm->kve_vn_rdev
+                    ,kvm->kve_vn_mode
+                    ,kvm->kve_status);    
+}
+
 int main(int argc, char **argv) {
     int dbgprint = 0;
 
@@ -238,37 +277,7 @@ int main(int argc, char **argv) {
 		sizes[w] = kvm->kve_end - kvm->kve_start;
 
         if (dbgprint)
-            printf( "[-]type is:%X\n"
-                "[-]offset is:0x%016llX\n"
-                "[-]fileid is:0x%016llX\n"
-                "[-]fsid is:0x%016llX\n"
-                "[-]flags are:%X\n"
-                "[-]resident page number:%X\n"
-                "[-]# of priv pages:%X\n"
-                "[-]proc bitmask:%X\n"
-                "[-]vm obj ref count:%X\n"
-                "[-]vm shadow count:%X\n"
-                "[-]vnode type:%X\n"
-                "[-]file size:0x%016llX\n"
-                "[-]device id:0x%016llX\n"
-                "[-]file mode:0x%016llX\n"
-                "[-]kve status:0x%016llX\n"
-
-                ,kvm->kve_type
-                ,kvm->kve_offset
-                ,kvm->kve_vn_fileid
-                ,kvm->kve_vn_fsid
-                ,kvm->kve_flags
-                ,kvm->kve_resident
-                ,kvm->kve_private_resident
-                ,kvm->kve_protection
-                ,kvm->kve_ref_count
-                ,kvm->kve_shadow_count
-                ,kvm->kve_vn_type
-                ,kvm->kve_vn_size
-                ,kvm->kve_vn_rdev
-                ,kvm->kve_vn_mode
-                ,kvm->kve_status);
+            printkvm(kvm);
 
 	}
 
@@ -321,7 +330,7 @@ int main(int argc, char **argv) {
         //translated positions for the patches:
 
         //relative to image
-        uint64_t text_mnt_usb0 = useless_zone + (uint64_t)msearch(ps4RelocPayload, "/mnt/sandbox/CUSA00001_0004\x00", strlen("/mnt/sandbox/CUSA00001_0004\x00") + 1) - (uint64_t)ps4RelocPayload;
+        uint64_t text_mnt_usb0 = useless_zone + (uint64_t)msearch(ps4RelocPayload, "/mnt/sandbox/CUSA00001_0000\x00", strlen("/mnt/sandbox/CUSA00001_0000\x00") + 1) - (uint64_t)ps4RelocPayload;
 
         char p[] = { 0x48, 0xb8 };
         char p2[] = { 0x48, 0x89, 0x85, 0x38, 0xf3, 0xff, 0xff ,
@@ -346,7 +355,7 @@ int main(int argc, char **argv) {
 
         printf("useless zone: %x payloadsize: %d datadest: %x\n", useless_zone, writesize, start[1]);
 
-        //write_process_form_sys(pid, start[1], "\x40\x00\x00\x00", 4); //start of data section, used for loading flag
+        write_process_form_sys(pid, start[1], "\x40\x00\x00\x00", 4); //start of data section, used for loading flag
         
         write_process_form_sys(pid, useless_zone, writebuff, writesize); //useless zone(exceptions list), has some extra bytes
 
@@ -360,7 +369,7 @@ int main(int argc, char **argv) {
         write_process_form_sys(pid, start[0] + 0x128b43, "\x90\xe9", 2); //null psfmountbigapphdd
         write_process_form_sys(pid, start[0] + 0xe571e, "\x90\x90\x90\x90\x90\x90", 6); //nmount failed
 
-        write_process_form_sys(pid, start[0] + 0x6ab81d, "/mnt/usb0/app0\x00", 15); //mount source on host
+        write_process_form_sys(pid, start[0] + 0x6ab81d, "/data/app0\x00", 15); //mount source on host
         write_process_form_sys(pid, start[0] + 0x6ab835, "/app0\x00", 6); //mount dest on jail
 
         //not working
@@ -385,6 +394,64 @@ int main(int argc, char **argv) {
 		free(writebuff);
     }
 
+    int clientsocket2;
+
+    printf("waiting for socket client\n");
+
+    ps4SocketTCPServerCreateAcceptThenDestroy(&clientsocket2, 10001);
+
+    printf("BROWSERPROC: got client socket %d\n", clientsocket2);
+
+    int pid2;
+    uint64_t bss_address;
+
+    read(clientsocket2, &pid2, 4);
+    read(clientsocket2, &bss_address, 8);
+
+    kvm0 = kinfo_getvmmap(pid2, &cnt);
+
+    printf("read ok, pid = %d bss= %llx\n", pid2, bss_address);
+
+    printf("    [+] vm entry list if for %d %llx %d\n", pid2, kvm0, cnt);
+    w = 0;
+    for (d = 0, kvm = kvm0; d<cnt; d++, kvm++, w++){
+        printf("        [+] process start is: 0x%016llX and process map size is: 0x%016llX\n", kvm->kve_start, kvm->kve_end - kvm->kve_start);
+        printf("        [+] process location in memory is: 0x%016llX\n", kvm->kve_offset);
+
+        start[w] = kvm->kve_start;          
+        stop[w] = kvm->kve_end;
+        offsets[w] = kvm->kve_offset;
+        sizes[w] = kvm->kve_end - kvm->kve_start;
+
+        if (dbgprint)
+            printkvm(kvm);
+
+    }
+
+    void * x = malloc(0x20000);
+    int fno = open("/data/rcved", O_RDONLY);
+    lseek(fno, 0x20000, SEEK_SET);
+    int readed = read(fno, x, 0x20000);
+    close(fno);
+
+    *(char*) x = 0xc3;
+
+    printf("readed %d from file, writing via mem\n", readed);
+
+    //write_process_form_sys(pid2, start[0], x, 0x20000);
+
+    Elf* aelf = elfCreate(x, readed);
+    elfLoaderInstantiate(pid2, aelf, (void*)start[0]);
+    elfLoaderRelocate(pid2, aelf, (void*)start[0], (void*)bss_address);
+
+    free(x);
+
+    write(clientsocket2, &(start[0]), 8); //sending jmp addr
+    close(clientsocket2);
+
+    printf("closed conn \n");
+
     return EXIT_SUCCESS;
 }
+
 

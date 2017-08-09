@@ -3,6 +3,14 @@
 .type ps4RelocPayload, @function
 .intel_syntax
 
+
+.macro popstring areg unique_identifier text
+    call \unique_identifier\()_definition
+    .asciz "\text\()"
+    \unique_identifier\()_definition:
+    pop \areg
+.endm
+
 .macro resolvefunc fname dest
     call \fname\()_definition
     .asciz "\fname\()"
@@ -121,9 +129,6 @@ doprinttext pttextout1 "starting...\n"
     test eax, eax
     jnz result_error
 
-doprinttext pttextout12 "starting 2...\n"
-
-
 resolvefunc sceKernelLoadStartModule "[rbp - 0x178]"
 resolvefunc socket "[rbp - 0x190]"
 resolvefunc connect "[rbp - 0x198]"
@@ -134,6 +139,16 @@ resolvefunc write "[rbp - 0x210]"
 resolvefunc fork "[rbp - 0x230]"
 resolvefunc execve "[rbp - 0x238]"
 resolvefunc dup2 "[rbp - 0x240]"
+
+doprinttext pttextout_dasdasdas "solving sceKernelJitCreateSharedMemory\n"
+
+resolvefunc sceKernelJitCreateSharedMemory "[rbp - 0x250]"
+resolvefunc sceKernelJitCreateAliasOfSharedMemory "[rbp - 0x258]"
+resolvefunc mmap "[rbp - 0x260]"
+resolvefunc open "[rbp - 0x290]"
+resolvefunc munmap "[rbp - 0x2a8]"
+
+doprinttext pttextout_ggdfgdgfdg "solved sceKernelJitCreateSharedMemory\n"
 
     lea rax, qword ptr [rbp - 0x168] #destination
     mov rcx, rax #arg3 
@@ -152,55 +167,31 @@ resolvefunc dup2 "[rbp - 0x240]"
 
 resolvefunc printf "[rbp - 0x248]"
 
-doprinttext pttextout_got_socket3 "printf resolved\n"
+doprinttext pttextout_got_socket34 "all lib calls resolved\n"
 
-call aprintfforu
-.asciz "aprintf for u %X %X %X\n"
-aprintfforu:
-pop rdi
-call [rbp - 0x248]
+#convert output to udp
 
-call aprintfforu2
-.asciz "ABABACABAB\n"
-aprintfforu2:
-pop rdi
-call primitive_hexdump
-
-doprinttext pttextout_got_socket4 "hexdump ok\n"
-
-#socket
-    mov     edx, 0          # protocol
-    mov     esi, 2          # type
-    mov     edi, 2          # domain
-    call    [r15 - 0x190] #socket
-
-    mov     [r15 - 0x218], eax
-    cmp     dword ptr [r15 - 0x218], 0
-    js     result_error
-
-#init address struct and connect
-    lea     rdi, [rbp+0x10]
-    mov qword ptr [rdi], 0
-    mov qword ptr [rdi+8], 0
-
-    mov     byte ptr [rbp-15], 2
-    mov     word ptr [rbp-14], 0x2923
-    mov     dword ptr [rbp-12], 0x2702A8C0
-    lea     rsi, [rbp-0x10]  # addr
-    mov     edx, 0x10        # len
-    mov     edi, [r15 - 0x218] # fd
-    call    [r15 - 0x198] #connect
-    test    eax, eax
-    js     result_error
-
-#dup2 socket to stdout
-    mov rdi, [r15 - 0x218]
-    mov rsi, 1 #STDOUT_FILENO
-    call [rbp - 0x240]
-
-    doprinttext pttextout_got_socket2 "printed\n"
+    doprinttext pttextout_got_socket2 "connected to udp\n"
 
 
+#RDI, RSI, RDX, RCX, R8, R9, XMM0–7
+
+#fork
+    call [rbp - 0x230]
+    test eax, eax
+    jnz checkforkerror
+
+    jmp slave_thread
+
+    checkforkerror:
+    test eax, eax
+    jns fork_ok
+
+    doprinttext pttextout33 "fork error!\n"
+    jmp result_error
+
+    fork_ok:
+    doprinttext pttextout34 "fork ok!\n"
 
 #dosendtext pttextout3 "[rbp-0x428]" "everything started, waiting instructions\n"
 
@@ -270,6 +261,8 @@ primitive_hexdump:
     mov qword ptr [rbp - 0x20], rdi
     mov qword ptr [rbp - 0x10], 0
 
+    xor rcx, rcx
+
     primitive_hexdump_loop:
     mov rsi, qword ptr [rbp - 0x20]
 
@@ -285,11 +278,11 @@ primitive_hexdump:
 
     call [r15 - 0x248]
 
-    mov rax, qword ptr [rbp - 0x10]
-    inc rax
-    mov qword ptr [rbp - 0x10], rax
-    cmp rax, 0x10
+    inc qword ptr [rbp - 0x10]
+    cmp qword ptr [rbp - 0x10], 0x10
     jnz primitive_hexdump_loop
+
+    doprinttext primitive_hexdump_outro "\n"
 
     mov rsp, rbp
     pop rbp
@@ -324,111 +317,6 @@ solvename:
     syscall
     ret
 
-connect_and_send:
-                 push    rbp
-                 mov     rbp, rsp
-                 sub     rsp, 0x430
-                 mov     edx, 0          # protocol
-                 mov     esi, 1          # type
-                 mov     edi, 2          # domain
-                 call    [r15 - 0x190] #socket
-
-                 mov     [rbp-0x428], eax
-                 cmp     dword ptr [rbp-0x428], 0
-                 jns     loc_4007B7
-
-
-                 #do some error msg
-                 #mov     edi, offset s   # "socket"
-                 #call    _perror
-
-                 mov     dword ptr [rbp-0x42c], 1
-                 jmp     connect_return_400875
- # ---------------------------------------------------------------------------
-
- loc_4007B7:
-                #doprinttext pttextout_got_socket "got socket\n"
-
-
-                 lea     rdi, [rbp+0x10]
-                 mov qword ptr [rdi], 0
-                 mov qword ptr [rdi+8], 0
-                 # mov     esi, 0x10        # n
-                 # call    _bzero #bzero?
-
-                 mov     byte ptr [rbp-15], 2
-                 mov     word ptr [rbp-14], 0x2923
-                 mov     dword ptr [rbp-12], 0x1f02A8C0
-                 lea     rsi, [rbp-0x10]  # addr
-                 mov     edx, 0x10        # len
-                 mov     edi, [rbp-0x428] # fd
-                 call    [r15 - 0x198] #connect
-                 test    eax, eax
-                 jns     after_connect_ok
-
-                 #another error msg
-                 #mov     edi, offset aConnect # "connect"
-                 #call    _perror
-
-                 mov     edi, [rbp-0x428] # fd
-                 mov     eax, 0
-                 call    [r15 - 0x200] # _close
-                 mov     dword ptr [rbp-0x42C], 2
-                 jmp     connect_return_400875
- # ---------------------------------------------------------------------------
-
- after_connect_ok:
-                 #doprinttext pttextout_connect_ok "connect ok\n"
-
-                 mov byte ptr [rbp-0x420], 'h'
-                 mov byte ptr [rbp-0x41f], 'e'
-                 mov byte ptr [rbp-0x41e], 'l'
-                 mov byte ptr [rbp-0x41d], 'l'
-                 mov byte ptr [rbp-0x41c], 'x'
-                 mov dword ptr [rbp-0x424], 5
-
- loc_400814:                             
-                 lea     rsi, [rbp-0x420] # buf
-                 mov     edx, [rbp-0x424] # n
-
-                 # call sendtext
-                 # .asciz "helloworld"
-                 # sendtext:
-                 # pop rsi
-                 # mov rdi, rsi
-                 # call _strlen
-                 # mov edx, eax
-
-                 mov     edi, [rbp-0x428] # fd
-                 mov     eax, 0
-                 call    [r15 - 0x210] #_write
-
- do_we_read:                             
-                 lea     rsi, [rbp-0x420] # buf
-                 mov     edx, 0x400       # nbytes
-                 mov     edi, [rbp-0x428] # fd
-                 mov     eax, 0
-                 call    [r15 - 0x208] #_read
-
-                 mov     [rbp-0x424], eax
-                 cmp     dword ptr [rbp-0x424], 0
-                 #loop?
-                 #jg      loc_400814 
-
-dont_read:
-                 mov     edi, [rbp-0x428] # fd
-                 mov     eax, 0
-                 call    [r15 - 0x200] #_close
-                 mov     dword ptr [rbp-0x42C], 0
-
- connect_return_400875:                             
-                                         
-                 mov     eax, [rbp-0x42C]
-                 leave
-                 ret
-
-
-
 
 _strlen:
   push  rcx            # save and clear out counter
@@ -446,6 +334,135 @@ _strlen_null:
 
 
 
+slave_thread:
+
+#perform memory magic
+
+# sceKernelJitCreateSharedMemory(0, m->size, PROT_READ | PROT_WRITE | PROT_EXEC, &executableHandle);
+    mov rdi, 0
+    mov rsi, 0x20000
+    mov edx, 7
+    lea rcx, [rbp - 0x268]
+    call [rbp - 0x250] #sceKernelJitCreateSharedMemory
+
+# sceKernelJitCreateAliasOfSharedMemory(executableHandle, PROT_READ | PROT_WRITE, &writableHandle);
+    mov rdi, [rbp - 0x268] #executable handle
+    mov esi, 3
+    lea rdx, [rbp - 0x270] #writeable handle
+    call [rbp - 0x258] #sceKernelJitCreateAliasOfSharedMemory
+
+
+    # mov rdi, 0x20000
+    # mov rsi, 0x20000
+    # call [rbp - 0x2a8] #ummap
+
+# m->executable = mmap(NULL, m->size, PROT_READ | PROT_EXEC, MAP_SHARED, executableHandle, 0);
+    mov rdi, 0x20000
+    mov rsi, 0x20000
+    mov edx, 5 #PROT_READ | PROT_EXEC
+    mov rcx, 1 #MAP_SHARED
+    mov r8, [rbp - 0x268]
+    mov r9, 0
+    call [rbp - 0x260] 
+
+    mov [rbp - 0x278], rax
+
+    # cmp rax, 0x4000
+    # jz continue_loading
+
+    popstring rdi loadfailedmsg "FAILED, exec page != 0x4000: %llX\n"
+    mov rsi, [rbp - 0x278]
+    call [rbp - 0x248]
+
+    # jmp result_error
+
+    # continue_loading:
+
+    # m->writable = mmap(NULL, m->size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_TYPE, writableHandle, 0);
+    mov rdi, 0
+    mov rsi, 0x20000
+    mov edx, 3 #PROT_READ | PROT_WRITE
+    mov ecx, 0x0f #MAP_PRIVATE | MAP_TYPE
+    mov r8, [rbp - 0x270]
+    mov r9, 0
+    call [rbp - 0x260]
+
+    mov [rbp - 0x280], rax
+
+    mov rdi, 0x40000
+    mov rsi, 0x10000
+    mov edx, 3 #PROT_READ | PROT_WRITE
+    mov ecx, 4111 #MAP_ANONYMOUS | MAP_TYPE
+    mov r8d, 0xffffffff
+    mov r9, 0
+    call [rbp - 0x260]
+
+    mov [rbp - 0x288], rax
+
+
+    popstring rdi aprintfforu "data page: %llX exec: %llX write: %llX h1: %x h2: %x\n"
+    mov rsi, [rbp - 0x288]
+    mov rdx, [rbp - 0x278]
+    mov rcx, [rbp - 0x280]
+    mov r8, [rbp - 0x268]
+    mov r9, [rbp - 0x270]
+    call [rbp - 0x248]
+
+    mov rdi, [rbp - 0x290]
+    call primitive_hexdump
+
+#open a file and read to those sections
+    popstring rdi loaderfile "/data/rcved"
+    mov rsi, 0
+    call [rbp - 0x290]
+
+    mov [rbp - 0x2a0], rax
+
+    popstring rdi aprintfforu2 "openfile: %llX\n"
+    mov rsi, [rbp - 0x2a0]
+    call [rbp - 0x248]
+
+#skip the first 0x4000 bytes
+    mov rdi, [rbp - 0x2a0]
+    mov rsi, [rbp - 0x280] #buffer addr
+    mov rdx, 0x4000
+    call [rbp - 0x208]
+
+    popstring rdi aprintfforu3 "first read: %llX\n"
+    mov rsi, rax
+    call [rbp - 0x248]
+
+#read the rest into the memory
+    mov rdi, [rbp - 0x2a0]
+    mov rsi, [rbp - 0x280] #buffer addr
+    mov rdx, 0x20000
+    call [rbp - 0x208]
+
+    mov rax, [rbp - 0x280]
+    mov byte ptr [rax], 0xc3
+
+    popstring rdi aprintfforu4 "second read: %llX\n"
+    mov rsi, rax
+    call [rbp - 0x248]
+
+    mov rdi, 0x4000
+    call primitive_hexdump
+
+    mov rdi, 0x4830
+    call primitive_hexdump
+
+    mov rdi, 0x0d571
+    call primitive_hexdump
+
+    mov rdi, 0x0d520
+    call primitive_hexdump
+
+doprinttext pttextout_executing_elf2 "executing elf\n"
+
+#fork and jmp to 
+mov rax, [rbp - 0x280]
+call rax
+#call [rbp - 0x278]
 
 .ascii "PAYLOADENDSHERE\n"
 

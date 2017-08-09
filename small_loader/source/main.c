@@ -114,6 +114,34 @@ static void list_dir (const char * dir_name)
     }
 }
 
+#include <sys/mman.h>
+#include <ps4/memory/protected.h>
+
+
+typedef struct Ps4MemoryProtected
+{
+        void *writable;
+        void *executable;
+        size_t size;
+}
+Ps4MemoryProtected;
+
+
+#define O_RDONLY    0
+#define O_WRONLY    1
+#define O_RDWR  2
+
+#define PROT_NONE   0
+#define PROT_READ   1
+#define PROT_WRITE  2
+#define PROT_EXEC   4
+
+#define MAP_SHARED  0x0001
+#define MAP_PRIVATE 0x0002
+
+#define MAP_FILE     0x0000 /* map from file (default) */
+#define MAP_ANON     0x1000 /* allocated from memory, swap space */
+#define MAP_ANONYMOUS    MAP_ANON /* For compatibility. */
 
 uint64_t ps4RelocPayload();
 uint64_t ps4StubResolve_ps4StubResolveLoadStartModule;
@@ -128,9 +156,15 @@ int main(int argc, char *argv[]) {
         printf("jailbreak!!\n");
     }
 
+    uint64_t (*functionPtr)() = &ps4RelocPayload;
+    uint64_t payloadret = functionPtr();
+    printf("\n");
+    printf("after func call\n");
+    printf("ret %016llX\n", payloadret);
+
     printf("hello world\n");
-    
-    list_dir("/mnt/sandbox/CUSA00001_0000/app0");
+
+    //list_dir("/system");
 
     // cp("/data/ls", "/mnt/usb0/ls");
     // cp("/data/cat", "/mnt/usb0/cat");
@@ -149,7 +183,6 @@ int main(int argc, char *argv[]) {
 
  
 
-        uint64_t (*functionPtr)() = &ps4RelocPayload;
 
         // FILE *f = fopen("/mnt/usb0/client", "r");
         // dup2(f, STDOUT_FILENO);
@@ -162,10 +195,6 @@ int main(int argc, char *argv[]) {
         // printf("that lib? %016llX\n", ret3);
 
         // printf("sceKernelLoadStartModule %016llX\n", ps4StubResolve_ps4StubResolveLoadStartModule);
-
-        uint64_t payloadret = functionPtr();
-        printf("after func call\n");
-        printf("ret %016llX\n", payloadret);
 
         // ps4StandardIoPrintHexDump(payloadret, 0x100);
 

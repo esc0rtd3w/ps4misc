@@ -1,3 +1,5 @@
+#include <dirent.h>
+
 #define _WANT_UCRED
 #define _XOPEN_SOURCE 700
 #define __BSD_VISIBLE 1
@@ -281,6 +283,83 @@ void decrypt_and_dump_self(char *selfFile, char *saveFile) {
 
 
 
+
+static void decrypt_dir (const char * dir_name)
+{
+    char fname[512];
+
+    DIR * d;
+
+    /* Open the directory specified by "dir_name". */
+
+    d = opendir (dir_name);
+
+    /* Check it was opened. */
+    if (! d) {
+        printf ("Cannot open directory '%s'\n",
+                 dir_name);
+        return ;
+    }
+    while (1) {
+        struct dirent * entry;
+        const char * d_name;
+
+        /* "Readdir" gets subsequent entries from "d". */
+        entry = readdir (d);
+        if (! entry) {
+            /* There are no more entries in this directory, so break
+               out of the while loop. */
+            break;
+        }
+        d_name = entry->d_name;
+        /* Print the name of the file and directory. */
+    printf ("%s/%s\n", dir_name, d_name);
+
+    if ((strstr(d_name, ".prx") != NULL) || (strstr(d_name, ".sprx") != NULL) || (strstr(d_name, ".elf") != NULL) || (strstr(d_name, ".self") != NULL)) {
+        snprintf(fname, 512, "%s/%s", dir_name, d_name);
+        decrypt_and_dump_self(fname, "");
+    }
+
+#if 0
+    /* If you don't want to print the directories, use the
+       following line: */
+
+        if (! (entry->d_type & DT_DIR)) {
+        printf ("%s/%s\n", dir_name, d_name);
+    }
+
+#endif /* 0 */
+
+
+        if (entry->d_type & DT_DIR) {
+
+            /* Check that the directory is not "d" or d's parent. */
+            
+            if (strcmp (d_name, "..") != 0 &&
+                strcmp (d_name, ".") != 0) {
+                int path_length;
+                char path[PATH_MAX];
+ 
+                path_length = snprintf (path, PATH_MAX,
+                                        "%s/%s", dir_name, d_name);
+                printf ("%s\n", path);
+                if (path_length >= PATH_MAX) {
+                    printf ("Path length has got too long.\n");
+                    return ;
+                }
+                /* Recursively call "list_dir" with the new path. */
+                decrypt_dir (path);
+            }
+    }
+    }
+    /* After going through all the entries, close the directory. */
+    if (closedir (d)) {
+        printf ("Could not close '%s'\n",
+                 dir_name);
+        return ;
+    }
+}
+
 int main(int argc, char **argv)
 {
     printf("hello1\n");
@@ -308,8 +387,11 @@ int main(int argc, char **argv)
 	//decrypt_and_dump_self("/system/vsh/SceShellCore.elf", "/mnt/usb0/SceShellCore.elf");
 	//decrypt_and_dump_self("/mini-syscore.elf", "/mnt/usb0/mini-syscore.elf");
     //decrypt_and_dump_self("/system/sys/SceSysCore.elf", "");
-    decrypt_and_dump_self("/system/common/lib/libkernel.sprx", "");
-    decrypt_and_dump_self("/system/common/lib/libc.sprx", "");
+    //decrypt_and_dump_self("/system/common/lib/libkernel.sprx", "");
+
+    decrypt_dir("/system/sys");
+
+    //decrypt_and_dump_self("/system/common/lib/libc.sprx", "");
 
     printf("kernel unhook\n");
     ps4KernelExecute((void*)unpath_self_mmap_check_function, NULL, &ret, NULL);

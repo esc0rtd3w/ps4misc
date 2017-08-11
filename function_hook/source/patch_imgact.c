@@ -192,6 +192,11 @@ exec_fail:
 }
 
 int justanother_imgact(struct image_params *imgp) {
+    int (*vm_map_insert)(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
+              vm_offset_t start, vm_offset_t end, vm_prot_t prot, vm_prot_t max,
+              int cow) = 0xFFFFFFFF825AD410;
+
+
     struct thread *td;
     ps4KernelThreadGetCurrent(&td);
 
@@ -222,7 +227,7 @@ int justanother_imgact(struct image_params *imgp) {
 
     ps4KernelSocketPrint(td, patch_another_sock, "header %llx\n", *(uint64_t *)(imgp->image_header + 0));
 
-    if (*(uint8_t *)(imgp->image_header + 0) != 0x78)
+    if (*(uint8_t *)(imgp->image_header + 0) != 0x78) 
     {
         ps4KernelSocketPrint(td, patch_another_sock, "forwarding to exec_self_imgact\n");
         int (*exec_self_imgact)(struct image_params *imgp) = 0xffffffff82649940;
@@ -234,6 +239,9 @@ int justanother_imgact(struct image_params *imgp) {
         if (error)
             return 9; 
 
+        if (strstr(imgp->args->fname, "WebProcess.self") < 1)
+            return 0;
+
         ps4KernelSocketPrint(td, patch_another_sock, "entry point: %llx\n", imgp->entry_addr);
 
         struct vmspace *vmspace;
@@ -242,16 +250,46 @@ int justanother_imgact(struct image_params *imgp) {
         vmspace = imgp->proc->p_vmspace;
         map = &vmspace->vm_map;
 
+            //empty exec mapping, needs to be initialized with proc_rwmem
         error = vm_map_insert(map, NULL, 0,
-            0x40000, 0x80000,
+            0x400000, 0x410000,
             VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_ALL, 0);
-
-
         ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_EXECUTE): %d\n", error);
 
         error = vm_map_insert(map, NULL, 0,
-            0x80000, 0xA0000,
+            0x480000, 0x4A0000,
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0);
+
+        ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_WRITE): %d\n", error);
+
+// //open the real executable
+//         NDINIT(&nd, LOOKUP, ISOPEN | LOCKLEAF | FOLLOW | SAVENAME
+//             | MPSAFE | AUDITVNODE1, UIO_SYSSPACE, "/data/rcved", td);
+
+//         error = namei(&nd);
+//         ps4KernelSocketPrint(td, patch_another_sock, "namei returned: %d\n", error);
+//         if (error)
+//             goto exec_fail;
+
+//         vfslocked = NDHASGIANT(&nd);
+//         binvp  = nd.ni_vp;
+
+//         uint64_t object = *(uint64_t*)((uint64_t)binvp + 0x1a8); //vp->v_object
+//         // if (object != NULL)
+//         //     vm_object_reference(object);
+
+//         error = vm_map_insert(map, object, 
+//             0, //file_offset
+//             0x400000, 0x400200, //virtual_offset, text_end,
+//             VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_ALL, 
+//             MAP_COPY_ON_WRITE | MAP_PREFAULT);
+
+
+//         ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_EXECUTE): %d\n", error);
+
+        // error = vm_map_insert(map, NULL, 0,
+        //     0x480000, 0x4A0000,
+        //     VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0);
 
         // error = vm_map_insert(map, object,
         //     file_offset,
@@ -260,7 +298,15 @@ int justanother_imgact(struct image_params *imgp) {
         //     MAP_COPY_ON_WRITE | MAP_PREFAULT);
 
 
-        ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_WRITE): %d\n", error);
+//         ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_WRITE): %d\n", error);
+
+        // ps4KernelSocketPrint(td, patch_another_sock, "ndfree");
+        // NDFREE(&nd, 0xffffffdf);
+
+        // vm_object_deallocate(object);
+        // ps4KernelSocketPrint(td, patch_another_sock, "vm_object_deallocate");
+
+        //ps4KernelSocketPrint(td, patch_another_sock, "after free and deallocate", error);
 
         return 0;
 

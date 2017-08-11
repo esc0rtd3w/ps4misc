@@ -48,6 +48,149 @@
 
 Ps4KernelSocket *patch_another_sock;
 
+enum vtype      { VNON, VREG, VDIR, VBLK, VCHR, VLNK, VSOCK, VFIFO, VBAD,
+                  VMARKER };
+
+struct vattr {
+        enum vtype      va_type;        /* vnode type (for create) */
+        u_short         va_mode;        /* files access mode and type */
+        short           va_nlink;       /* number of references to file */
+        uid_t           va_uid;         /* owner user id */
+        gid_t           va_gid;         /* owner group id */
+        dev_t           va_fsid;        /* filesystem id */
+        long            va_fileid;      /* file id */
+        u_quad_t        va_size;        /* file size in bytes */
+        long            va_blocksize;   /* blocksize preferred for i/o */
+        struct timespec va_atime;       /* time of last access */
+        struct timespec va_mtime;       /* time of last modification */
+        struct timespec va_ctime;       /* time file changed */
+        struct timespec va_birthtime;   /* time file created */
+        u_long          va_gen;         /* generation number of file */
+        u_long          va_flags;       /* flags defined for file */
+        dev_t           va_rdev;        /* device the special file represents */
+        u_quad_t        va_bytes;       /* bytes of disk space held by file */
+        u_quad_t        va_filerev;     /* file modification number */
+        u_int           va_vaflags;     /* operations flags, see below */
+        long            va_spare;       /* remain quad aligned */
+};
+
+
+int hihack_exec(struct image_params *imgp) {
+    struct thread *td;
+    ps4KernelThreadGetCurrent(&td);
+
+    struct image_args args;
+    args.buf = "";
+    args.begin_argv = "";
+    args.begin_envv = "";
+    args.fname = "/system/common/lib/WebProcess.self";
+    args.fname_buf = NULL;
+    args.argc = 0;
+    args.envc = 0;
+    args.fd = 0;
+
+
+    struct vattr attr;
+
+    struct proc *p = td->td_proc;
+    struct nameidata nd;
+    struct ucred *newcred = NULL, *oldcred;
+    struct uidinfo *euip;
+    register_t *stack_base;
+    int error, i;
+    //struct image_params image_params, *imgp;
+
+    int (*img_first)(struct image_params *);
+    struct pargs *oldargs = NULL, *newargs = NULL;
+    struct sigacts *oldsigacts, *newsigacts;
+    struct vnode *textvp = NULL, *binvp = NULL;
+    int credential_changing;
+    int vfslocked;
+    int textset;
+    static const char fexecv_proc_title[] = "(fexecv)";
+
+    vfslocked = 0;
+
+    imgp->proc = p;
+    imgp->execlabel = NULL;
+    imgp->attr = &attr;
+    imgp->entry_addr = 0;
+    imgp->reloc_base = 0;
+    imgp->vmspace_destroyed = 0;
+    imgp->interpreted = 0;
+    imgp->opened = 0;
+    imgp->interpreter_name = NULL;
+    imgp->auxargs = NULL;
+    imgp->vp = NULL;
+    imgp->object = NULL;
+    imgp->firstpage = NULL;
+    imgp->ps_strings = 0;
+    imgp->auxarg_size = 0;
+    imgp->args = &args;
+    imgp->execpath = imgp->freepath = NULL;
+    imgp->execpathp = 0;
+    imgp->canary = 0;
+    imgp->canarylen = 0;
+    imgp->pagesizes = 0;
+    imgp->pagesizeslen = 0;
+    imgp->stack_prot = 0;
+
+    imgp->image_header = NULL;
+
+    //should unmount my own file ?
+    NDINIT(&nd, LOOKUP, ISOPEN | LOCKLEAF | FOLLOW | SAVENAME
+        | MPSAFE | AUDITVNODE1, UIO_SYSSPACE, args.fname, td);
+
+    error = namei(&nd);
+    ps4KernelSocketPrint(td, patch_another_sock, "namei returned: %d\n", error);
+    if (error)
+        goto exec_fail;
+
+    vfslocked = NDHASGIANT(&nd);
+    binvp  = nd.ni_vp;
+    imgp->vp = binvp;
+
+    error = exec_check_permissions(imgp);
+    ps4KernelSocketPrint(td, patch_another_sock, "exec_check_permissions returned: %d\n", error);
+    if (error)
+        goto exec_fail_dealloc;
+
+    imgp->object = *(uint64_t*)((uint64_t)imgp->vp + 0x1a8); //vp->v_object
+    if (imgp->object != NULL)
+        vm_object_reference(imgp->object);
+
+    error = exec_map_first_page(imgp);
+    ps4KernelSocketPrint(td, patch_another_sock, "exec_map_first_page returned: %d\n", error);
+    if (error)
+        goto exec_fail_dealloc;
+
+    imgp->proc->p_osrel = 0;
+
+    if (imgp->image_header != NULL)
+        ps4KernelSocketPrintHexDump(td, patch_another_sock, imgp->image_header, 0x20);
+
+    ps4KernelSocketPrint(td, patch_another_sock, "calling exec_self_imgact\n");
+    int (*exec_self_imgact)(struct image_params *imgp) = 0xffffffff82649940;
+    error = exec_self_imgact(imgp);
+
+    ps4KernelSocketPrint(td, patch_another_sock, "exec_self_imgact returned: %d\n", error);
+
+    if (error)
+        goto exec_fail_dealloc;
+
+
+    ps4KernelSocketPrint(td, patch_another_sock, "entry point: %llx\n", imgp->entry_addr);
+
+    return 0;
+
+exec_fail_dealloc:
+    //need to free the file lock
+    
+exec_fail:
+    return error;
+
+}
+
 int justanother_imgact(struct image_params *imgp) {
     struct thread *td;
     ps4KernelThreadGetCurrent(&td);
@@ -86,49 +229,10 @@ int justanother_imgact(struct image_params *imgp) {
         return exec_self_imgact(imgp);
     }
 
-    //should unmount my own file ?
-    char * fname = "/system/common/lib/MonoCompiler.elf";
-
-    NDINIT(&nd, LOOKUP, ISOPEN | LOCKLEAF | FOLLOW | SAVENAME
-        | MPSAFE | AUDITVNODE1, UIO_SYSSPACE, fname, td);
-
-    error = namei(&nd);
-    ps4KernelSocketPrint(td, patch_another_sock, "namei returned: %d\n", error);
-    if (error)
-        goto exec_fail;
-
-    vfslocked = NDHASGIANT(&nd);
-    binvp  = nd.ni_vp;
-    imgp->vp = binvp;
-
-    error = exec_check_permissions(imgp);
-    ps4KernelSocketPrint(td, patch_another_sock, "exec_check_permissions returned: %d\n", error);
-    if (error)
-        goto exec_fail_dealloc;
-
-    imgp->object = *(uint64_t*)((uint64_t)imgp->vp + 0x1a8); //vp->v_object
-    if (imgp->object != NULL)
-        vm_object_reference(imgp->object);
-
-    error = exec_map_first_page(imgp);
-    ps4KernelSocketPrint(td, patch_another_sock, "exec_map_first_page returned: %d\n", error);
-    if (error)
-        goto exec_fail_dealloc;
-
+    struct image_params new_image_params;
+    int hret = hihack_exec(&new_image_params);
+    ps4KernelSocketPrint(td, patch_another_sock, "hihack exec_self_imgact rets: %d\n", hret);
     
-    ps4KernelSocketPrintHexDump(td, patch_another_sock, imgp->image_header, 0x20);
-
-    ps4KernelSocketPrint(td, patch_another_sock, "forwarding to exec_self_imgact\n");
-    int (*exec_self_imgact)(struct image_params *imgp) = 0xffffffff82649940;
-    int ret = exec_self_imgact(imgp);
-
-    ps4KernelSocketPrint(td, patch_another_sock, "exec_self_imgact returned: %d\n", ret);
-
-    if (ret)
-        goto exec_fail_dealloc;
-
-
-    ps4KernelSocketPrint(td, patch_another_sock, "entry point: %llx\n", imgp->entry_addr);
 
 
     uint64_t prevrbp;
@@ -147,13 +251,15 @@ int justanother_imgact(struct image_params *imgp) {
     uint64_t procstruct = *(uint64_t*)(prevrbp - 0x208);
     ps4KernelSocketPrint(td, patch_another_sock, "proc: %llx\n", procstruct);
 
-
-    //proc+0x7d0 -> orbis sysvec
-    ps4KernelSocketPrint(td, patch_another_sock, "proc->0x7d0\n", *(uint64_t*)(procstruct + 0x7d0));
-    uint64_t self_orbis_sysvec = *(uint64_t*)(procstruct + 0x7d0);
-    uint64_t unk1 = *(uint64_t*)(self_orbis_sysvec + 0x38); //??? many suword64
-    uint64_t exec_copyout_strings = *(uint64_t*)(self_orbis_sysvec + 0x98); //exec_copyout_strings
-    uint64_t exec_set_regs = *(uint64_t*)(self_orbis_sysvec + 0xa0); //set_regs
+    if (procstruct != 0)
+    {
+        //proc+0x7d0 -> orbis sysvec
+        ps4KernelSocketPrint(td, patch_another_sock, "proc->0x7d0\n", *(uint64_t*)(procstruct + 0x7d0));
+        uint64_t self_orbis_sysvec = *(uint64_t*)(procstruct + 0x7d0);
+        uint64_t unk1 = *(uint64_t*)(self_orbis_sysvec + 0x38); //??? many suword64
+        uint64_t exec_copyout_strings = *(uint64_t*)(self_orbis_sysvec + 0x98); //exec_copyout_strings
+        uint64_t exec_set_regs = *(uint64_t*)(self_orbis_sysvec + 0xa0); //set_regs
+    }
 
     //dtrace_fasttrap_exec can be used
 

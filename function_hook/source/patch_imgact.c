@@ -226,12 +226,43 @@ int justanother_imgact(struct image_params *imgp) {
     {
         ps4KernelSocketPrint(td, patch_another_sock, "forwarding to exec_self_imgact\n");
         int (*exec_self_imgact)(struct image_params *imgp) = 0xffffffff82649940;
+
+        ps4KernelSocketPrint(td, patch_another_sock, "entry point: %llx\n", imgp->entry_addr);
+
+        imgp->entry_addr = 0x1000;
+
+        struct vmspace *vmspace;
+        vm_map_t map;
+
+        vmspace = imgp->proc->p_vmspace;
+        map = &vmspace->vm_map;
+
+        error = vm_map_insert(map, NULL, 0,
+            0x40000, 0x80000,
+            VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_ALL, 0);
+
+
+        ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_EXECUTE): %d\n", error);
+
+        error = vm_map_insert(map, NULL, 0,
+            0x80000, 0xA0000,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0);
+
+        // error = vm_map_insert(map, object,
+        //     file_offset,
+        //     virtual_offset, text_end,
+        //     VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_ALL,
+        //     MAP_COPY_ON_WRITE | MAP_PREFAULT);
+
+
+        ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_WRITE): %d\n", error);
+
         return exec_self_imgact(imgp);
     }
 
     struct image_params new_image_params;
-    int hret = hihack_exec(&new_image_params);
-    ps4KernelSocketPrint(td, patch_another_sock, "hihack exec_self_imgact rets: %d\n", hret);
+    error = hihack_exec(&new_image_params);
+    ps4KernelSocketPrint(td, patch_another_sock, "hihack exec_self_imgact rets: %d\n", error);
     
 
 

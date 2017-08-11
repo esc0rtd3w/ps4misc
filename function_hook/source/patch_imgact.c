@@ -36,29 +36,49 @@
 
 #include <ps4/kernel.h>
 
-extern Ps4KernelSocket *patch_another_sock;
+///home/user/projects/freebsd/sys/sys/namei.h
+//#include </home/user/projects/freebsd/sys/sys/bufobj.h>
+#include </home/user/projects/freebsd/sys/sys/namei.h>
+//#include </home/user/projects/freebsd/sys/sys/vnode.h>
 
-//from vnode.h
 #define LK_EXCLUSIVE    0x080000
-#define LK_RETRY    0x000400
-int _vn_lock(struct vnode *vp, int flags, char *file, int line);
-//#define vn_lock(vp, flags) _vn_lock(vp, flags, __FILE__, __LINE__)
+#define LK_RETRY        0x000400
 
+#define AT_FDCWD        -100
 
+Ps4KernelSocket *patch_another_sock;
 
 int justanother_imgact(struct image_params *imgp) {
+    struct thread *td;
+    ps4KernelThreadGetCurrent(&td);
+
+    struct proc *p = td->td_proc;
+    struct nameidata nd;
+    struct ucred *newcred = NULL, *oldcred;
+    struct uidinfo *euip;
+    register_t *stack_base;
+    int error, i;
+    //struct image_params image_params, *imgp;
+
+    int (*img_first)(struct image_params *);
+    struct pargs *oldargs = NULL, *newargs = NULL;
+    struct sigacts *oldsigacts, *newsigacts;
+    struct vnode *textvp = NULL, *binvp = NULL;
+    int credential_changing;
+    int vfslocked;
+    int textset;
+    static const char fexecv_proc_title[] = "(fexecv)";
+
+    vfslocked = 0;
 
     // ps4KernelProtectionWriteDisable();
     // *(uint64_t*)(0xffffffff83263f60) = 0xffffffff82649940; //restore original exec
     // ps4KernelProtectionWriteEnable();
-    struct thread *td;
-    ps4KernelThreadGetCurrent(&td);
 
     ps4KernelSocketPrint(td, patch_another_sock, "executing %s\n", imgp->args->fname);
 
     ps4KernelSocketPrint(td, patch_another_sock, "header %llx\n", *(uint64_t *)(imgp->image_header + 0));
 
-    //char * name = *(char**)(((char*)imgp) + 0x80);
     if (*(uint8_t *)(imgp->image_header + 0) != 0x78)
     {
         ps4KernelSocketPrint(td, patch_another_sock, "forwarding to exec_self_imgact\n");
@@ -66,142 +86,81 @@ int justanother_imgact(struct image_params *imgp) {
         return exec_self_imgact(imgp);
     }
 
-    ps4KernelSocketPrint(td, patch_another_sock, "starting our own executor\n");
+    //should unmount my own file ?
+    char * fname = "/system/common/lib/MonoCompiler.elf";
 
-    //const struct exec *a_out = (const struct exec *) imgp->image_header; //0x28
-    //will use orbis sysentvec
-    struct sysentvec * aout_sysvec = (struct sysentvec *) 0xFFFFFFFF83263E38;
+    NDINIT(&nd, LOOKUP, ISOPEN | LOCKLEAF | FOLLOW | SAVENAME
+        | MPSAFE | AUDITVNODE1, UIO_SYSSPACE, fname, td);
 
-    //read dinamically
-    uint64_t a_text = 0x1ad;
-    uint64_t a_data = 0;
-    uint64_t a_entry = *(uint64_t *)(imgp->image_header + 0x18);
+    error = namei(&nd);
+    ps4KernelSocketPrint(td, patch_another_sock, "namei returned: %d\n", error);
+    if (error)
+        goto exec_fail;
 
-    struct vmspace *vmspace;
-    vm_map_t map;
-    vm_object_t object;
-    vm_offset_t text_end, data_end;
-    unsigned long virtual_offset= 0x400000;
-    unsigned long file_offset = 0;
-    unsigned long bss_size = 0;
-    int error;
+    vfslocked = NDHASGIANT(&nd);
+    binvp  = nd.ni_vp;
+    imgp->vp = binvp;
 
-    // 1.76 retail addrs
+    error = exec_check_permissions(imgp);
+    ps4KernelSocketPrint(td, patch_another_sock, "exec_check_permissions returned: %d\n", error);
+    if (error)
+        goto exec_fail_dealloc;
 
-    // VOP_UNLOCK_APV => FFFFFFFF822A10A0
-    // exec_new_vmspace => FFFFFFFF82406A10
-    int (*exec_new_vmspace)(struct image_params *, struct sysentvec *) = 0xFFFFFFFF82406A10;
-    // vm_map_lock => 0
-    // vm_map_unlock => 0
-    // vm_object_reference => FFFFFFFF825B92E0
-    void (*vm_object_reference)(vm_object_t object) = 0xFFFFFFFF825B92E0;
-    // vm_map_insert => FFFFFFFF825AD410
-    int (*vm_map_insert)(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
-              vm_offset_t start, vm_offset_t end, vm_prot_t prot, vm_prot_t max,
-              int cow) = 0xFFFFFFFF825AD410;
-    // vm_object_deallocate => FFFFFFFF825B9380
-    void (*vm_object_deallocate)(vm_object_t object) = 0xFFFFFFFF825B9380;
-    // _vn_lock => FFFFFFFF824D18C0
-    int (*vn_lock)(struct vnode *vp, int flags, char *file, int line) = 0xFFFFFFFF824D18C0;
-    // exec_shell_imgact => FFFFFFFF823E9D30
+    imgp->object = *(uint64_t*)((uint64_t)imgp->vp + 0x1a8); //vp->v_object
+    if (imgp->object != NULL)
+        vm_object_reference(imgp->object);
+
+    error = exec_map_first_page(imgp);
+    ps4KernelSocketPrint(td, patch_another_sock, "exec_map_first_page returned: %d\n", error);
+    if (error)
+        goto exec_fail_dealloc;
+
+    
+    ps4KernelSocketPrintHexDump(td, patch_another_sock, imgp->image_header, 0x20);
+
+    ps4KernelSocketPrint(td, patch_another_sock, "forwarding to exec_self_imgact\n");
+    int (*exec_self_imgact)(struct image_params *imgp) = 0xffffffff82649940;
+    int ret = exec_self_imgact(imgp);
+
+    ps4KernelSocketPrint(td, patch_another_sock, "exec_self_imgact returned: %d\n", ret);
+
+    if (ret)
+        goto exec_fail_dealloc;
 
 
-    error = exec_new_vmspace(imgp, aout_sysvec);
+    ps4KernelSocketPrint(td, patch_another_sock, "entry point: %llx\n", imgp->entry_addr);
 
-    ps4KernelSocketPrint(td, patch_another_sock, "exec_new_vmspace returned: %d\n", error);
 
-    vn_lock(imgp->vp, LK_EXCLUSIVE | LK_RETRY, NULL, 0);
-    if (error){
-        ps4KernelSocketPrint(td, patch_another_sock, "vn_lock returned: %d\n", error);
-        return (error);
-    }
+    uint64_t prevrbp;
+    __asm__ ("mov %%rbp, %0" : "=r"(prevrbp));
 
-    //
-    // The vm space can be changed by exec_new_vmspace
-    //
-    vmspace = imgp->proc->p_vmspace;
+    ps4KernelSocketPrint(td, patch_another_sock, "ret addr: %llx\n", prevrbp);
+    ps4KernelSocketPrintHexDump(td, patch_another_sock, prevrbp, 0x20);
 
-    object = imgp->object;
-    map = &vmspace->vm_map;
-    //vm_map_lock(map);
-    vm_object_reference(object);
+    prevrbp = *(uint64_t*)prevrbp;
 
-    ps4KernelSocketPrint(td, patch_another_sock, "after vm_object_reference\n");
+    ps4KernelSocketPrint(td, patch_another_sock, "prev rbp: %llx\n", prevrbp);
 
-    text_end = virtual_offset + a_text;
-    error = vm_map_insert(map, object,
-        file_offset,
-        virtual_offset, text_end,
-        VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_ALL,
-        MAP_COPY_ON_WRITE | MAP_PREFAULT);
-    if (error) {
-        ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert error %d\n", error);
-        //vm_map_unlock(map);
-        vm_object_deallocate(object);
-        return (error);
-    }
+    //should be a if
+    ps4KernelSocketPrint(td, patch_another_sock, "prev imgp: %llx cur: %llx\n", *(uint64_t*)(prevrbp - 0x1e8), imgp);
 
-    ps4KernelSocketPrint(td, patch_another_sock, "after vm_map_insert\n");
+    uint64_t procstruct = *(uint64_t*)(prevrbp - 0x208);
+    ps4KernelSocketPrint(td, patch_another_sock, "proc: %llx\n", procstruct);
 
-    data_end = text_end + a_data;
-    if (a_data) {
-        vm_object_reference(object);
-        ps4KernelSocketPrint(td, patch_another_sock, "after 2nd vmreference fo: %llx vs: %llx ve: %llx\n", file_offset + a_text, text_end, data_end );
-        error = vm_map_insert(map, object,
-            file_offset + a_text,
-            text_end, data_end,
-            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL,
-            MAP_COPY_ON_WRITE | MAP_PREFAULT);
-        if (error) {
-            ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert error %d\n", error);
-            //vm_map_unlock(map);
-            vm_object_deallocate(object);
-            return (error);
-        }
-    }
 
-    ps4KernelSocketPrint(td, patch_another_sock, "after vm_map_insert2\n");
+    //proc+0x7d0 -> orbis sysvec
+    ps4KernelSocketPrint(td, patch_another_sock, "proc->0x7d0\n", *(uint64_t*)(procstruct + 0x7d0));
+    uint64_t self_orbis_sysvec = *(uint64_t*)(procstruct + 0x7d0);
+    uint64_t unk1 = *(uint64_t*)(self_orbis_sysvec + 0x38); //??? many suword64
+    uint64_t exec_copyout_strings = *(uint64_t*)(self_orbis_sysvec + 0x98); //exec_copyout_strings
+    uint64_t exec_set_regs = *(uint64_t*)(self_orbis_sysvec + 0xa0); //set_regs
 
-    bss_size = 0x10000;
-    data_end = 0x50000;
-
-    if (bss_size) {
-        error = vm_map_insert(map, NULL, 0,
-            data_end, data_end + bss_size,
-            VM_PROT_ALL, VM_PROT_ALL, 0);
-        if (error) {
-            ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert error %d\n", error);
-            //vm_map_unlock(map);
-            return (error);
-        }
-    }
-
-    ps4KernelSocketPrint(td, patch_another_sock, "after vm_map_insert3\n");
-
-    //vm_map_unlock(map);
-
-    imgp->interpreted = 0; //get from 
-
-    imgp->entry_addr = a_entry;
-
-    imgp->proc->p_sysent = aout_sysvec;
-
-    ps4KernelSocketPrint(td, patch_another_sock, "returning, entrypoint: %llx\n",a_entry);
+    //dtrace_fasttrap_exec can be used
 
     return 0;
-}
 
-//make it inlined?
-void _vm_map_lock(vm_map_t map, const char *file, int line)
-{
-        if (map->system_map)
-                _mtx_lock_flags(&map->system_mtx, 0, file, line);
-        else
-                (void)_sx_xlock(&map->lock, 0, file, line);
-        map->timestamp++;
-}
-
-//hope no reordering
-void nextf() {
-    __asm__(".asciz \"PATCH_END\"");
+exec_fail_dealloc:
+    //need to free the file lock
+exec_fail:
+    return 9;
 }

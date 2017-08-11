@@ -227,9 +227,14 @@ int justanother_imgact(struct image_params *imgp) {
         ps4KernelSocketPrint(td, patch_another_sock, "forwarding to exec_self_imgact\n");
         int (*exec_self_imgact)(struct image_params *imgp) = 0xffffffff82649940;
 
-        ps4KernelSocketPrint(td, patch_another_sock, "entry point: %llx\n", imgp->entry_addr);
+        error = exec_self_imgact(imgp);
 
-        imgp->entry_addr = 0x1000;
+        
+        ps4KernelSocketPrint(td, patch_another_sock, "exec_self_imgact: %d\n", error);
+        if (error)
+            return 9; 
+
+        ps4KernelSocketPrint(td, patch_another_sock, "entry point: %llx\n", imgp->entry_addr);
 
         struct vmspace *vmspace;
         vm_map_t map;
@@ -257,7 +262,8 @@ int justanother_imgact(struct image_params *imgp) {
 
         ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_WRITE): %d\n", error);
 
-        return exec_self_imgact(imgp);
+        return 0;
+
     }
 
     struct image_params new_image_params;

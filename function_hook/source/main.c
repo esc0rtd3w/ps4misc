@@ -36,11 +36,12 @@ int probe() {
 	ps4KernelSocketPrint(td, patch_another_sock, "unpaused\n");
 }
 
+//might be disruptive, can be turned off
 int printf_hook(int rdi, int rsi, int rdx, int rcx) {
     struct thread *td;
     ps4KernelThreadGetCurrent(&td);
 
-	ps4KernelSocketPrint(td, patch_another_sock, "printf %s\n", rdi, rsi, rdx, rcx);
+	ps4KernelSocketPrint(td, patch_another_sock, "printf %llx %llx %llx %llx\n", rdi, rsi, rdx, rcx);
 
 	pause("paused", 1000);
 
@@ -196,14 +197,15 @@ int main(int argc, char **argv)
 
 	//*(uint64_t*)&(mark_flag[2]) = (uint64_t)&flag;
 
-	char jmp_probe[] = {0x49, 0xbb, 1,2,3,4,5,6,7,8, 0x41, 0xff, 0xe3, 
-		0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90};
+	char jmp_probe[] = {0x49, 0xbb, 1,2,3,4,5,6,7,8, 0x41, 0xff, 0xe3, 0x90};
 	*(uint64_t*)&(jmp_probe[2]) = (uint64_t)printf_hook;
 
 	// char jmp_probe[] = {0xe8, 0x08, 0x00, 0x00, 0x00, 1,2,3,4,5,6,7,8, 0x41, 0x5b, 0x41, 0xff, 0x23};
 	// *(uint64_t*)&(jmp_probe[5]) = (uint64_t)probe;
 
-	bcopy(jmp_probe, printf_ref, 18);
+	critical_enter();
+	bcopy(jmp_probe, printf_ref, 14);
+	critical_exit();
 
 	r = ps4KernelSocketPrintHexDump(td, client, 0xffffffff8240511e, 0x60);
 	ps4KernelSocketPrint(td, patch_another_sock, "\n");

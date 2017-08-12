@@ -224,6 +224,8 @@ int justanother_imgact(struct image_params *imgp) {
     // ps4KernelProtectionWriteEnable();
 
     ps4KernelSocketPrint(td, patch_another_sock, "executing %s\n", imgp->args->fname);
+    ps4KernelSocketPrint(td, patch_another_sock, "argc %d\n", imgp->args->argc);
+    ps4KernelSocketPrintHexDump(td, patch_another_sock, imgp->args->begin_envv, imgp->args->begin_envv - imgp->args->begin_argv);
 
     ps4KernelSocketPrint(td, patch_another_sock, "header %llx\n", *(uint64_t *)(imgp->image_header + 0));
 

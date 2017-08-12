@@ -27,23 +27,7 @@ Ps4KernelSocket *patch_another_sock;
 
 #include <imgact.h>
 
-void afunc();
-__asm__("afunc: \n\
-    .intel_syntax\n\
-    call alabel\n\
-    alabel:\n\
-    pop rbx\n\
-    sub rbx, 13\n\
-    call blabel\n\
-    .asciz \"lol\\n\"\n\
-    blabel:\n\
-    mov rdx, 4\n\
-    pop rsi\n\
-    mov rdi, 1 \n\
-    mov rax, 4 \n\
-    call [rbx] \n\
-    ret\n\
-    .att_syntax");
+void ps4RelocPayload();
 
 
 int probe() {
@@ -84,6 +68,27 @@ int write_mem(struct thread *td, struct proc *p, uint64_t base, char *buff, int 
 }
 
 
+char * msearch(char * start, char * haystack, int size) 
+{
+    char* mymem = start;
+    for(;;){
+        if (strncmp(mymem, haystack, size) == 0){
+            return mymem;
+        }
+        mymem ++;
+    }
+}
+
+char dump2[0x4000];
+void socketprintsection(struct thread *td, char * title, uint64_t pos, uint64_t size)
+{
+		ps4KernelSocketPrint(td, patch_another_sock, title);
+	    bzero(dump2, size);
+	    copyin(pos, dump2, size);
+	    ps4KernelSocketPrintHexDump(td, patch_another_sock, dump2, size);
+		ps4KernelSocketPrint(td, patch_another_sock, "\n");
+}
+
 //exec_setregs(td, imgp, (u_long)(uintptr_t)stack_base);
 uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64_t stack_base) {
 	uint64_t (*f)(uint64_t td, struct image_params *imgp, uint64_t stack_base) = 0xffffffff82603ce0;
@@ -101,6 +106,7 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 
 	if ((imgp->args->fname != NULL) & (strstr(imgp->args->fname,"WebProcess.self") > 0))
 	{
+		pause("paused", 100);
 
 		*(uint64_t*)(dump+0x70) = 0x400000; //overwrite the program entry
 
@@ -109,56 +115,52 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 
 	    bzero(dump, 0x100);
 	    copyin(stack_base, dump, 0xc0*2);
-	    ps4KernelSocketPrintHexDump(td, patch_another_sock, dump, 0xc0*2);
-		ps4KernelSocketPrint(td, patch_another_sock, "\n");
+
+		socketprintsection(td, "stack_base:\n", stack_base, 0xc0);
 
 
 		uint64_t program_entry = *(uint64_t*)(dump+0x70);
 
 //overwrite the program entry
-		*(uint64_t*)(dump+0x70) = 0x300000; 
+		*(uint64_t*)(dump+0x70) = 0x400000; 
 	    copyout(dump, stack_base, 0xc0*2); 
 
-		ps4KernelSocketPrint(td, patch_another_sock, "program entry before:\n");
-	    bzero(dump, 0x100);
-	    copyin(program_entry, dump, 0xc0);
-	    ps4KernelSocketPrintHexDump(td, patch_another_sock, dump, 0x20);
-		ps4KernelSocketPrint(td, patch_another_sock, "\n");
+		socketprintsection(td, "program entry before:\n", program_entry, 0x20);
 
 
-
-		ps4KernelSocketPrint(td, patch_another_sock, "payload in rw mem:\n");
-	    copyout(afunc, 0x480000, 0x100);
-
-	    bzero(dump, 0x100);
-	    copyin(0x480000, dump, 100);
-	    ps4KernelSocketPrintHexDump(td, patch_another_sock, dump, 100);
-		ps4KernelSocketPrint(td, patch_another_sock, "\n");
-
-
-		ps4KernelSocketPrint(td, patch_another_sock, "payload in exec/r mem:\n");
 		//not possible to use copyout, would need proc_rwmem
-	    copyout(afunc, 0x400000, 0x100); 
+	    //copyout(ps4RelocPayload, 0x400000, 0x100); 
 
-		uint64_t gadget = kernel_start + (0xba10 - 0x18d58);
-
-  //       int ret = write_mem(td, imgp->proc, program_entry-8, &gadget, 8);
-
-		// ret = write_mem(td, imgp->proc, program_entry, afunc, 0x100);
+		uint64_t gadget = kernel_start + (0x45a - 0x1bd58);
 
 
-	    bzero(dump, 0x100);
-	    copyin(program_entry, dump, 100);
-	    ps4KernelSocketPrintHexDump(td, patch_another_sock, dump, 100);
-		ps4KernelSocketPrint(td, patch_another_sock, "\n");
+		socketprintsection(td, "gadget:\n", gadget, 0x60);
 
+        char * userdata = msearch(ps4RelocPayload, "USER_INPUT_DATA", 15);
+        uint64_t offset = (uint64_t)userdata - (uint64_t)ps4RelocPayload;
+        uint64_t psize = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
+        
 
-		ps4KernelSocketPrint(td, patch_another_sock, "program entry after:\n");
-	    bzero(dump, 0x100);
-	    copyin(program_entry-0x10, dump, 0xc0);
-	    ps4KernelSocketPrintHexDump(td, patch_another_sock, dump, 0x30);
-		ps4KernelSocketPrint(td, patch_another_sock, "\n");
+		//pause("paused", 100);
 
+		uint64_t webprocess_invalid_args = program_entry + 0x742 - 0x8c0;
+
+        int ret = write_mem(td, imgp->proc, 0x400000, ps4RelocPayload, psize);
+		ret = write_mem(td, imgp->proc, 0x400000 + offset, &gadget, 8);
+		uint64_t gadget2 = program_entry + 0x16a0 - 0x8c0;
+		ret = write_mem(td, imgp->proc, 0x400000 + offset + 8, &gadget2, 8);
+
+//write a jmp to 0x400000
+		char ajmp [] = {0x48, 0xbb, 1,2,3,4,5,6,7,8, 0xff, 0xe3};
+		*(uint64_t*)&(ajmp[2]) = 0x400000;
+
+		// ret = write_mem(td, imgp->proc, program_entry, &ajmp, 12);
+
+		socketprintsection(td, "after injecting payload:\n", program_entry, 0x100);
+
+		pause("paused", 100);
+
+		//0x400000
 
    //      struct vmspace *vmspace;
    //      vm_map_t map;
@@ -173,10 +175,29 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 			// 	1 
 			// );
 
-		ps4KernelSocketPrint(td, patch_another_sock, "pmap_protect returned v15\n");
+		ps4KernelSocketPrint(td, patch_another_sock, "pmap_protect returned v35\n");
 	}
 
 	return ret;
+}
+
+uint64_t hook_sys_dynlib_load_prx(uint64_t rdi, uint64_t rsi)
+{
+    struct thread *td;
+    ps4KernelThreadGetCurrent(&td);
+
+	uint64_t (*sys_dynlib_load_prx)(uint64_t rdi, uint64_t rsi) = 0xffffffff825e28f0;
+
+	char name[0x400];
+	copyin(*(uint64_t*)rsi, name, 0x400);
+
+	ps4KernelSocketPrint(td, patch_another_sock, "sys_dynlib_load_prx loading lib %s\n", name);
+
+	int error = sys_dynlib_load_prx(rdi, rsi);
+
+	ps4KernelSocketPrint(td, patch_another_sock, "sys_dynlib_load_prx ret: %d\n", error);
+
+	return error;
 }
 
 //might be disruptive, can be turned off
@@ -226,17 +247,6 @@ int unpath_self_mmap_check_function(struct thread *td, void *uap) {
 }
 
 int exec_shell_imgact_patch();
-
-char * msearch(char * start, char * haystack, int size) 
-{
-    char* mymem = start;
-    for(;;){
-        if (strncmp(mymem, haystack, size) == 0){
-            return mymem;
-        }
-        mymem ++;
-    }
-}
 
 int justanother_imgact(struct image_params *imgp);
 
@@ -304,13 +314,14 @@ int main(int argc, char **argv)
 
 	ps4KernelProtectionWriteDisable();
 
-	int size = (uint64_t)msearch(justanother_imgact, "PATCH_END", 9) - (uint64_t)justanother_imgact;
+	int size = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
 	ps4KernelSocketPrint(td, patch_another_sock, "patch size: %d\n", size);
 
 	//r = ps4KernelSocketPrintHexDump(td, client, justanother_imgact, 0x60);
 
 	*(uint64_t*)(0xffffffff83263f60) = justanother_imgact;
 	*(uint64_t*)(0xffffffff83263ed8) = hook_exec_set_regs;
+	*(uint64_t*)(0xffffffff83234bd8) = hook_sys_dynlib_load_prx;
 	// *(uint64_t*)(0xffffffff83263f60) = probe;
 
 	//memcpy(exec_self_imgact, justanother_imgact, size);

@@ -143,8 +143,8 @@ lock cmpxchg dword ptr [rbx], ecx
 jz first_run
 
 #if the printer has been sucessfully initialized
-    cmp eax, 1
-    jz printf_the_stuff
+    #cmp eax, 1
+    #jz printf_the_stuff
 
 jmp result_sucess
 

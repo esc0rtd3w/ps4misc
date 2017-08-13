@@ -209,8 +209,10 @@ int
 __elfN(load_file)(struct proc *p, const char *file, u_long *addr,
     u_long *entry, size_t pagesize);
 
+
+// elf loader...
 uint64_t 
-hihack_proc(struct image_params *imgp, uint64_t * outprocentry) 
+hihack_proc(struct image_params *imgp, char * filename, uint64_t * outprocentry) 
 {
     int (*vm_map_insert)(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
               vm_offset_t start, vm_offset_t end, vm_prot_t prot, vm_prot_t max,
@@ -239,7 +241,7 @@ hihack_proc(struct image_params *imgp, uint64_t * outprocentry)
 
 // //open the real executable
     NDINIT(&nd, LOOKUP, ISOPEN | FOLLOW | SAVENAME // | LOCKLEAF
-        | AUDITVNODE1, UIO_SYSSPACE, "/data/rcved", td);
+        | AUDITVNODE1, UIO_SYSSPACE, filename, td);
 
     ps4KernelSocketPrint(td, patch_another_sock, "after NDINIT v2\n");
 

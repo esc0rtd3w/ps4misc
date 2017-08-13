@@ -89,7 +89,7 @@ void socketprintsection(struct thread *td, char * title, uint64_t pos, uint64_t 
 		ps4KernelSocketPrint(td, patch_another_sock, "\n");
 }
 
-uint64_t hihack_proc(struct image_params *imgp, uint64_t * outprocentry);
+uint64_t hihack_proc(struct image_params *imgp, char * filename, uint64_t * outprocentry);
 
 //exec_setregs(td, imgp, (u_long)(uintptr_t)stack_base);
 uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64_t stack_base) {
@@ -119,9 +119,7 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 	//socketprintsection(td, "mapped file\n", 0x900000, 0x60);
 
 
-
-
-	if ((found_hihack_command != 0) & (imgp->args->fname != NULL) & (strstr(imgp->args->fname,"WebProcess.self") > 0))
+	if ((imgp->args->fname != NULL) & (strstr(imgp->args->fname,"eboot.bin") > 0))
 	{
 	    struct vmspace *vmspace;
 	    vm_map_t map;
@@ -134,7 +132,7 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 
 		uint64_t new_entry = 0;
 
-        hihack_proc(imgp, &new_entry);
+        hihack_proc(imgp, "/data/minecraft.bin", &new_entry);
 
         ps4KernelSocketPrint(td, patch_another_sock, "new program entrypoint: %llx\n", new_entry);
 
@@ -178,38 +176,66 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 		socketprintsection(td, "hito gadget2:\n", 0x93a4FFFF8, 8);
 		socketprintsection(td, "gadget content:\n", gadget, 0x10);
 
-		//pause("paused", 100);
+		ps4KernelSocketPrint(td, patch_another_sock, "pmap_protect returned v35\n");
+	}
 
-//write payload and kernel syscall gadget addr
-  //       int ret = write_mem(td, imgp->proc, 0x400000, ps4RelocPayload, payload_size);
-		// ret = write_mem(td, imgp->proc, 0x400000 + offset, &gadget, 8); //kernel gadget
-		// uint64_t gadget2 = program_entry + 0x16a0 - 0x8c0;
-		// ret = write_mem(td, imgp->proc, 0x400000 + offset + 8, &gadget2, 8);
 
-//write a jmp to 0x400000
-		// char ajmp [] = {0x48, 0xbb, 1,2,3,4,5,6,7,8, 0xff, 0xe3};
-		// *(uint64_t*)&(ajmp[2]) = 0x400000;
+	if ((found_hihack_command != 0) & (imgp->args->fname != NULL) & (strstr(imgp->args->fname,"WebProcess.self") > 0))
+	{
+	    struct vmspace *vmspace;
+	    vm_map_t map;
 
-		// ret = write_mem(td, imgp->proc, program_entry, &ajmp, 12);
+	    vmspace = imgp->proc->p_vmspace;
+	    map = &vmspace->vm_map;
 
-		// socketprintsection(td, "after injecting payload:\n", program_entry, 0x100);
 
-		// pause("paused", 100);
+        ps4KernelSocketPrint(td, patch_another_sock, "HIHACKING PROC\n");
 
-		//0x400000
+		uint64_t new_entry = 0;
 
-   //      struct vmspace *vmspace;
-   //      vm_map_t map;
+        hihack_proc(imgp, "/data/rcved", &new_entry);
 
-   //      vmspace = imgp->proc->p_vmspace;
-   //      map = &vmspace->vm_map;
+        ps4KernelSocketPrint(td, patch_another_sock, "new program entrypoint: %llx\n", new_entry);
 
-		 // vm_map_protect 	( 	map,
-			// 	0x400000,
-			// 	0x410000,
-			// 	VM_PROT_READ | VM_PROT_EXECUTE,
-			// 	1 
-			// );
+        
+		//ps4KernelSocketPrint(td, patch_another_sock, "setting regs\n", imgp->args->fname);
+
+	    bzero(dump, 0x100);
+	    copyin(stack_base, dump, 0xc0*2);
+
+		socketprintsection(td, "stack_base dump:\n", stack_base, 0xc0);
+
+
+		//gotta find where this is writen to get a better definition
+		uint64_t * p_program_entry = (uint64_t*)(dump + 0x70 + (imgp->args->argc * 8) + (imgp->args->envc * 8));
+		uint64_t program_entry = * p_program_entry;
+
+//overwrite the program entry
+		* p_program_entry = new_entry;
+	    copyout(dump, stack_base, 0xc0*2); 
+
+		socketprintsection(td, "stack_base dump:\n", stack_base, 0xc0);
+
+		socketprintsection(td, "program entry:\n", new_entry, 0x200);
+
+
+		uint64_t gadget = kernel_start + (0x45a - 0x1bd58);//1.76 specific, kernel syscall/ret gadget, - kernel.start
+
+        // char * userdata = msearch(ps4RelocPayload, "USER_INPUT_DATA", 15);
+        // uint64_t offset = (uint64_t)userdata - (uint64_t)ps4RelocPayload;
+        // uint64_t payload_size = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
+        
+
+//shit happens, make it compatible with hito sdk (could use a so many ways to find this gadget without this hack)
+	    int error = vm_map_insert(map, NULL, 0,
+	        0x93a4fc000, 0x93a500000,
+	        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0);
+
+		copyout(&gadget, 0x93a4FFFF8, 8); 
+
+		
+		socketprintsection(td, "hito gadget2:\n", 0x93a4FFFF8, 8);
+		socketprintsection(td, "gadget content:\n", gadget, 0x10);
 
 		ps4KernelSocketPrint(td, patch_another_sock, "pmap_protect returned v35\n");
 	}

@@ -330,16 +330,6 @@ int main(int argc, char **argv) {
         //translated positions for the patches:
 
         //relative to image
-        uint64_t text_mnt_usb0 = useless_zone + (uint64_t)msearch(ps4RelocPayload, "/mnt/sandbox/CUSA00001_0000\x00", strlen("/mnt/sandbox/CUSA00001_0000\x00") + 1) - (uint64_t)ps4RelocPayload;
-
-        char p[] = { 0x48, 0xb8 };
-        char p2[] = { 0x48, 0x89, 0x85, 0x38, 0xf3, 0xff, 0xff ,
-                        0x49, 0x89, 0xc1, 
-                        0x90, 0x90, 0x90};
-        write_process_form_sys(pid, start[0] + 0xe7f53, p, 2);
-        write_process_form_sys(pid, start[0] + 0xe7f53 + 2, (char*)&text_mnt_usb0, 8);
-        write_process_form_sys(pid, start[0] + 0xe7f53 + 10, p2, 7 + 6);
-
 
         char * mymem = msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15);
 

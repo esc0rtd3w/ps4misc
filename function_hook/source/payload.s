@@ -125,12 +125,6 @@ pop r14
 # pop r14
 mov r13, [r14] #syscall 0 gadget
 
-call otext2
-.asciz "hello world v9"
-otext2:
-pop rdi
-
-call [r14+8]
 
 
     lea rax, qword ptr [rbp - 0x168] #destination

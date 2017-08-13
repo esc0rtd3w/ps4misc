@@ -155,16 +155,17 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 		* p_program_entry = new_entry;
 	    copyout(dump, stack_base, 0xc0*2); 
 
-		socketprintsection(td, "program entry before:\n", program_entry, 0x20);
+		socketprintsection(td, "stack_base dump:\n", stack_base, 0xc0);
+
+		socketprintsection(td, "program entry:\n", new_entry, 0x200);
 
 
 		uint64_t gadget = kernel_start + (0x45a - 0x1bd58);//1.76 specific, kernel syscall/ret gadget, - kernel.start
 
-        char * userdata = msearch(ps4RelocPayload, "USER_INPUT_DATA", 15);
-        uint64_t offset = (uint64_t)userdata - (uint64_t)ps4RelocPayload;
-        uint64_t payload_size = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
+        // char * userdata = msearch(ps4RelocPayload, "USER_INPUT_DATA", 15);
+        // uint64_t offset = (uint64_t)userdata - (uint64_t)ps4RelocPayload;
+        // uint64_t payload_size = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
         
-
 
 //shit happens, make it compatible with hito sdk (could use a so many ways to find this gadget without this hack)
 	    int error = vm_map_insert(map, NULL, 0,
@@ -386,8 +387,8 @@ int main(int argc, char **argv)
 
 	ps4KernelProtectionWriteDisable();
 
-	int size = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
-	ps4KernelSocketPrint(td, patch_another_sock, "patch size: %d\n", size);
+	// int size = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
+	// ps4KernelSocketPrint(td, patch_another_sock, "patch size: %d\n", size);
 
 	//r = ps4KernelSocketPrintHexDump(td, client, justanother_imgact, 0x60);
 

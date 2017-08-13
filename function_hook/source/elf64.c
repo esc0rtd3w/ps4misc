@@ -112,6 +112,9 @@ int
 __elfN(map_partial)(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
     vm_offset_t start, vm_offset_t end, vm_prot_t prot)
 {
+    struct thread *td;
+    ps4KernelThreadGetCurrent(&td);
+
     struct sf_buf *sf;
     int error;
     vm_offset_t off;
@@ -132,6 +135,9 @@ __elfN(map_partial)(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
         if (sf == NULL)
             return (KERN_FAILURE);
         off = offset - trunc_page(offset);
+
+        ps4KernelSocketPrint(td, patch_another_sock, "[INFO] trying to copy \n { off: %llx start: %llx end: %llx}\n", off, start, end - start);
+
         error = copyout((caddr_t)sf_buf_kva(sf) + off, (caddr_t)start,
             end - start);
         vm_imgact_unmap_page(sf);
@@ -147,7 +153,7 @@ int
 __elfN(map_insert)(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
     vm_offset_t start, vm_offset_t end, vm_prot_t prot, int cow)
 {
-   struct thread *td;
+    struct thread *td;
     ps4KernelThreadGetCurrent(&td);
 
     ps4KernelSocketPrint(td, patch_another_sock, "[INFO] got to a map_insert \n { off: %llx start: %llx end: %llx prot: %d}\n", offset, start, end, prot);

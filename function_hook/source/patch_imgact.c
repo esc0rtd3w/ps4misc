@@ -307,7 +307,7 @@ hihack_proc(struct image_params *imgp, uint64_t * outprocentry)
                 (caddr_t)(uintptr_t)phdr[i].p_vaddr + rbase,
                 phdr[i].p_memsz, phdr[i].p_filesz, prot);
 
-        if ((phdr[i].p_memsz != 0) & (phdr[i].p_type != 1)) {
+        if ((phdr[i].p_memsz != 0) & (phdr[i].p_type == PT_LOAD)) {
             /* Loadable segment */
             prot = __elfN(trans_prot)(phdr[i].p_flags);
 

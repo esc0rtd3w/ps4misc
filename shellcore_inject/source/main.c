@@ -276,7 +276,7 @@ int main(int argc, char **argv) {
 		offsets[w] = kvm->kve_offset;
 		sizes[w] = kvm->kve_end - kvm->kve_start;
 
-        if (dbgprint)
+        if (dbgprint & (d < 2))
             printkvm(kvm);
 
 	}
@@ -359,21 +359,6 @@ int main(int argc, char **argv) {
         
         write_process_form_sys(pid, useless_zone, writebuff, writesize); //useless zone(exceptions list), has some extra bytes
 
-        //did work until now
-        write_process_form_sys(pid, sceRifManagerEntitlementStatOnHDD, (char*)&StatEntitlement, 30);
-        write_process_form_sys(pid, CheckSkuFlag, (char*)&StatEntitlement, 30);
-        write_process_form_sys(pid, sceNpManagerIntGetSigninState, (char*)&StatEntitlement, 30);
-        write_process_form_sys(pid, start[0] + 0xeb310, "\x90\x90\x90\x90\x90\x90", 6); //pass usb to the sandboxes
-        write_process_form_sys(pid, start[0] + 0xc6899 + 3, "\xa9\xd2\x5c\x00\x49\x89\xc7\x90\x90", 9); //???
-        write_process_form_sys(pid, start[0] + 0x13c281, "\xb8\x00\x00\x00\x00", 5); //null psfmountbigapphdd
-        write_process_form_sys(pid, start[0] + 0x128b43, "\x90\xe9", 2); //null psfmountbigapphdd
-        write_process_form_sys(pid, start[0] + 0xe571e, "\x90\x90\x90\x90\x90\x90", 6); //nmount failed
-
-        write_process_form_sys(pid, start[0] + 0x6ab81d, "/data/app0\x00", 15); //mount source on host
-        write_process_form_sys(pid, start[0] + 0x6ab835, "/app0\x00", 6); //mount dest on jail
-
-        //not working
-        //write_process_form_sys(pid, processCheck_unk, (char*)&StatEntitlement, 30);
 
         write_process_form_sys(pid, p_tracefunc, (char*)&useless_zone, 8);
 
@@ -383,73 +368,8 @@ int main(int argc, char **argv) {
         readbuff = readdata_hex(pid, useless_zone, 0x60);
         free(readbuff);
 
-        //memcpy(writebuff, "\xc3\xc3", 2);
-		//write_process_form_sys(pid, base + intoBase, writebuff, writesize);
-		//read_process_form_sys(pid, base + intoBase, readbuff, dumpsize); 
-
-		// printf("now reading changes..\n");
-
-		// ps4StandardIoPrintHexDump(readbuff, dumphexsize);
-
 		free(writebuff);
     }
-
-    int clientsocket2;
-
-    printf("waiting for socket client\n");
-
-    ps4SocketTCPServerCreateAcceptThenDestroy(&clientsocket2, 10001);
-
-    printf("BROWSERPROC: got client socket %d\n", clientsocket2);
-
-    int pid2;
-    uint64_t bss_address;
-
-    read(clientsocket2, &pid2, 4);
-    read(clientsocket2, &bss_address, 8);
-
-    kvm0 = kinfo_getvmmap(pid2, &cnt);
-
-    printf("read ok, pid = %d bss= %llx\n", pid2, bss_address);
-
-    printf("    [+] vm entry list if for %d %llx %d\n", pid2, kvm0, cnt);
-    w = 0;
-    for (d = 0, kvm = kvm0; d<cnt; d++, kvm++, w++){
-        printf("        [+] process start is: 0x%016llX and process map size is: 0x%016llX\n", kvm->kve_start, kvm->kve_end - kvm->kve_start);
-        printf("        [+] process location in memory is: 0x%016llX\n", kvm->kve_offset);
-
-        start[w] = kvm->kve_start;          
-        stop[w] = kvm->kve_end;
-        offsets[w] = kvm->kve_offset;
-        sizes[w] = kvm->kve_end - kvm->kve_start;
-
-        if (dbgprint)
-            printkvm(kvm);
-
-    }
-
-    void * x = malloc(0x20000);
-    int fno = open("/data/rcved", O_RDONLY);
-    lseek(fno, 0x20000, SEEK_SET);
-    int readed = read(fno, x, 0x20000);
-    close(fno);
-
-    *(char*) x = 0xc3;
-
-    printf("readed %d from file, writing via mem\n", readed);
-
-    //write_process_form_sys(pid2, start[0], x, 0x20000);
-
-    Elf* aelf = elfCreate(x, readed);
-    elfLoaderInstantiate(pid2, aelf, (void*)start[0]);
-    elfLoaderRelocate(pid2, aelf, (void*)start[0], (void*)bss_address);
-
-    free(x);
-
-    write(clientsocket2, &(start[0]), 8); //sending jmp addr
-    close(clientsocket2);
-
-    printf("closed conn \n");
 
     return EXIT_SUCCESS;
 }

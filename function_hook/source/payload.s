@@ -191,6 +191,7 @@ doprinttext hellothere "hellothere\n"
     resolvefunc mmap "[rbp - 0x260]"
     resolvefunc open "[rbp - 0x290]"
     resolvefunc munmap "[rbp - 0x2a8]"
+    resolvefunc mprotect "[rbp - 0xb0]"
 
 #resolve libc calls
     call populate_libc
@@ -224,14 +225,36 @@ doprinttext pttextout_got_socket34 "all lib calls resolved\n"
     test    eax, eax
     js     result_error
 
+    lea rax, qword ptr [rbp - 0x168] #destination
+    mov rcx, rax #arg3 
+    mov r10, rax #arg3 
+    mov rdx, 0 #arg1 stdout
+
+    call name2
+    .asciz "hellosystem.sprx"
+    name2:
+    pop rsi
+
+    mov rdi, 594
+    mov rax, 0
+    call r13
+
 
 #dup2 the socket to STDOUT
     mov rdi, [r15 - 0x218]
     mov rsi, 1 #STDOUT_FILENO
     call [rbp - 0x240]
 
+    mov rdx, 10
+    popstring rsi udphellostr1 "udp hello\n"
+    mov rdi, [r15 - 0x218]
+    call [rbp - 0x210]
+
 
 doprinttext udphellostr "udp hello\n"
+
+mov rdi, 0x900000
+call primitive_hexdump
 
 #get pid
     mov rdi, 20

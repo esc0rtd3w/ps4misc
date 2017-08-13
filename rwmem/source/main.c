@@ -394,62 +394,68 @@ int main(int argc, char **argv) {
 		free(writebuff);
     }
 
-    int clientsocket2;
 
-    printf("waiting for socket client\n");
 
-    ps4SocketTCPServerCreateAcceptThenDestroy(&clientsocket2, 10001);
 
-    printf("BROWSERPROC: got client socket %d\n", clientsocket2);
+    //planned service to memwrite file sections:
 
-    int pid2;
-    uint64_t bss_address;
 
-    read(clientsocket2, &pid2, 4);
-    read(clientsocket2, &bss_address, 8);
+    // int clientsocket2;
 
-    kvm0 = kinfo_getvmmap(pid2, &cnt);
+    // printf("waiting for socket client\n");
 
-    printf("read ok, pid = %d bss= %llx\n", pid2, bss_address);
+    // ps4SocketTCPServerCreateAcceptThenDestroy(&clientsocket2, 10001);
 
-    printf("    [+] vm entry list if for %d %llx %d\n", pid2, kvm0, cnt);
-    w = 0;
-    for (d = 0, kvm = kvm0; d<cnt; d++, kvm++, w++){
-        printf("        [+] process start is: 0x%016llX and process map size is: 0x%016llX\n", kvm->kve_start, kvm->kve_end - kvm->kve_start);
-        printf("        [+] process location in memory is: 0x%016llX\n", kvm->kve_offset);
+    // printf("BROWSERPROC: got client socket %d\n", clientsocket2);
 
-        start[w] = kvm->kve_start;          
-        stop[w] = kvm->kve_end;
-        offsets[w] = kvm->kve_offset;
-        sizes[w] = kvm->kve_end - kvm->kve_start;
+    // int pid2;
+    // uint64_t bss_address;
 
-        if (dbgprint)
-            printkvm(kvm);
+    // read(clientsocket2, &pid2, 4);
+    // read(clientsocket2, &bss_address, 8);
 
-    }
+    // kvm0 = kinfo_getvmmap(pid2, &cnt);
 
-    void * x = malloc(0x20000);
-    int fno = open("/data/rcved", O_RDONLY);
-    lseek(fno, 0x20000, SEEK_SET);
-    int readed = read(fno, x, 0x20000);
-    close(fno);
+    // printf("read ok, pid = %d bss= %llx\n", pid2, bss_address);
 
-    *(char*) x = 0xc3;
+    // printf("    [+] vm entry list if for %d %llx %d\n", pid2, kvm0, cnt);
+    // w = 0;
+    // for (d = 0, kvm = kvm0; d<cnt; d++, kvm++, w++){
+    //     printf("        [+] process start is: 0x%016llX and process map size is: 0x%016llX\n", kvm->kve_start, kvm->kve_end - kvm->kve_start);
+    //     printf("        [+] process location in memory is: 0x%016llX\n", kvm->kve_offset);
 
-    printf("readed %d from file, writing via mem\n", readed);
+    //     start[w] = kvm->kve_start;          
+    //     stop[w] = kvm->kve_end;
+    //     offsets[w] = kvm->kve_offset;
+    //     sizes[w] = kvm->kve_end - kvm->kve_start;
 
-    //write_process_form_sys(pid2, start[0], x, 0x20000);
+    //     if (dbgprint)
+    //         printkvm(kvm);
 
-    Elf* aelf = elfCreate(x, readed);
-    elfLoaderInstantiate(pid2, aelf, (void*)start[0]);
-    elfLoaderRelocate(pid2, aelf, (void*)start[0], (void*)bss_address);
+    // }
 
-    free(x);
+    // void * x = malloc(0x20000);
+    // int fno = open("/data/rcved", O_RDONLY);
+    // lseek(fno, 0x20000, SEEK_SET);
+    // int readed = read(fno, x, 0x20000);
+    // close(fno);
 
-    write(clientsocket2, &(start[0]), 8); //sending jmp addr
-    close(clientsocket2);
+    // *(char*) x = 0xc3;
 
-    printf("closed conn \n");
+    // printf("readed %d from file, writing via mem\n", readed);
+
+    // //write_process_form_sys(pid2, start[0], x, 0x20000);
+
+    // Elf* aelf = elfCreate(x, readed);
+    // elfLoaderInstantiate(pid2, aelf, (void*)start[0]);
+    // elfLoaderRelocate(pid2, aelf, (void*)start[0], (void*)bss_address);
+
+    // free(x);
+
+    // write(clientsocket2, &(start[0]), 8); //sending jmp addr
+    // close(clientsocket2);
+
+    // printf("closed conn \n");
 
     return EXIT_SUCCESS;
 }

@@ -1,3 +1,4 @@
+#define __ELF_WORD_SIZE 64
 #define __BSD_VISIBLE 1
 #define _KERNEL
 #include <sys/types.h>
@@ -41,10 +42,14 @@
 #include </home/user/projects/freebsd/sys/sys/namei.h>
 //#include </home/user/projects/freebsd/sys/sys/vnode.h>
 
+#include <machine/elf.h>
+
 #define LK_EXCLUSIVE    0x080000
 #define LK_RETRY        0x000400
 
 #define AT_FDCWD        -100
+
+char * msearch(char * start, char * haystack, int size) ;
 
 Ps4KernelSocket *patch_another_sock;
 
@@ -107,7 +112,6 @@ int hihack_exec(struct image_params *imgp) {
     int credential_changing;
     int vfslocked;
     int textset;
-    static const char fexecv_proc_title[] = "(fexecv)";
 
     vfslocked = 0;
 
@@ -191,6 +195,222 @@ exec_fail:
 
 }
 
+vm_prot_t __elfN(trans_prot)(Elf_Word flags);
+
+#define FREAD 0x0001
+
+int
+__elfN(load_section)(struct vmspace *vmspace,
+    vm_object_t object, vm_offset_t offset,
+    caddr_t vmaddr, size_t memsz, size_t filsz, vm_prot_t prot,
+    size_t pagesize);
+
+int 
+__elfN(load_file)(struct proc *p, const char *file, u_long *addr,
+    u_long *entry, size_t pagesize);
+
+uint64_t 
+hihack_proc(struct image_params *imgp, uint64_t * outprocentry) 
+{
+    int (*vm_map_insert)(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
+              vm_offset_t start, vm_offset_t end, vm_prot_t prot, vm_prot_t max,
+              int cow) = 0xFFFFFFFF825AD410;
+
+
+    struct thread *td;
+    ps4KernelThreadGetCurrent(&td);
+
+    const Elf64_Ehdr *hdr = NULL;
+    const Elf64_Phdr *phdr = NULL;
+
+    struct vnode *binvp = NULL;
+    struct proc *p = td->td_proc;
+    struct nameidata nd;
+    struct ucred *newcred = NULL, *oldcred;
+    struct uidinfo *euip;
+    int error = 0;
+
+    struct vmspace *vmspace;
+    vm_map_t map;
+
+    vmspace = imgp->proc->p_vmspace;
+    map = &vmspace->vm_map;
+
+
+// //open the real executable
+    NDINIT(&nd, LOOKUP, ISOPEN | FOLLOW | SAVENAME // | LOCKLEAF
+        | AUDITVNODE1, UIO_SYSSPACE, "/data/rcved", td);
+
+    ps4KernelSocketPrint(td, patch_another_sock, "after NDINIT v2\n");
+
+    error = namei(&nd);
+    ps4KernelSocketPrint(td, patch_another_sock, "namei returned: %d\n", error);
+    if (error)
+        goto exec_fail;
+
+//         vfslocked = NDHASGIANT(&nd); //only when passing MP_SAFE to NDINIT
+    binvp  = nd.ni_vp;
+
+    struct vattr attr;
+    struct image_params nimgp;
+    nimgp.vp = binvp;
+    nimgp.firstpage = 0;
+    nimgp.object = NULL;
+    nimgp.attr = &attr;
+
+    uint64_t cp_error = exec_check_permissions(&nimgp);
+    
+    ps4KernelSocketPrint(td, patch_another_sock, "exec_check_permissions: %d, opened: %d\n", cp_error, nimgp.opened);
+
+
+    //could do some checks with map/unmap, ignore for now
+    uint64_t ma = exec_map_first_page(&nimgp);
+
+    ps4KernelSocketPrint(td, patch_another_sock, "exec_map_first_page: %d %llx\n", ma, nimgp.image_header);
+
+    nimgp.object = *(uint64_t*)((uint64_t)binvp + 0x1a8); //vp->v_object
+
+    ps4KernelSocketPrint(td, patch_another_sock, "binvp->v_object: %llx\n", nimgp.object);
+
+    if (nimgp.object != NULL)
+        vm_object_reference(nimgp.object);
+
+    ps4KernelSocketPrint(td, patch_another_sock, "after vm_object_reference\n");
+
+    hdr = (const Elf64_Ehdr *)(nimgp.image_header);
+    phdr = (const Elf64_Phdr *)((uint64_t)nimgp.image_header + hdr->e_phoff);
+
+    uint64_t rbase = 0;
+    uint64_t base_addr = 0;
+    uint64_t prot = 0;
+    uint64_t pagesize = 0x4000;
+
+
+    ps4KernelSocketPrintHexDump(td, patch_another_sock, nimgp.image_header, 0x100);
+
+    ps4KernelSocketPrint(td, patch_another_sock, "Elf64_Ehdr {\n    unsigned char   e_ident[EI_NIDENT]; /* File identification. */\n    Elf64_Half  e_type    = %d;     /* File type. */\n    Elf64_Half  e_machine = %d;  /* Machine architecture. */\n    Elf64_Word  e_version = %d;  /* ELF format version. */\n    Elf64_Addr  e_entry = %llx;    /* Entry point. */\n    Elf64_Off   e_phoff = %llx;    /* Program header file offset. */\n    Elf64_Off   e_shoff;    /* Section header file offset. */\n    Elf64_Word  e_flags;    /* Architecture-specific flags. */\n    Elf64_Half  e_ehsize;   /* Size of ELF header in bytes. */\n    Elf64_Half  e_phentsize;    /* Size of program header entry. */\n    Elf64_Half  e_phnum;    /* Number of program header entries. */\n    Elf64_Half  e_shentsize;    /* Size of section header entry. */\n    Elf64_Half  e_shnum;    /* Number of section header entries. */\n    Elf64_Half  e_shstrndx; /* Section name strings section. */\n}\n", 
+            hdr->e_type,
+            hdr->e_machine,
+            hdr->e_version,
+            hdr->e_entry,
+            hdr->e_phoff
+            );
+
+    ps4KernelSocketPrintHexDump(td, patch_another_sock, phdr, 0x40);
+
+    * outprocentry = hdr->e_entry + rbase;
+
+    for (int i = 0, numsegs = 0; i < hdr->e_phnum; i++) {
+            ps4KernelSocketPrint(td, patch_another_sock, "section \n { type: %d offset: %llx vaddr: %llx memsz: %llx filesz: %llx prot: %x } \n", 
+                phdr[i].p_type,
+                phdr[i].p_offset,
+                (caddr_t)(uintptr_t)phdr[i].p_vaddr + rbase,
+                phdr[i].p_memsz, phdr[i].p_filesz, prot);
+
+        if ((phdr[i].p_memsz != 0) & (phdr[i].p_type != 1)) {
+            /* Loadable segment */
+            prot = __elfN(trans_prot)(phdr[i].p_flags);
+
+            // error = vm_map_insert(map, nimgp.object, 
+            //     phdr[i].p_offset, //file_offset
+            //     (caddr_t)(uintptr_t)phdr[i].p_vaddr + rbase, 
+            //     (caddr_t)(uintptr_t)phdr[i].p_vaddr + rbase + phdr[i].p_memsz, //virtual_offset, text_end,
+            //     VM_PROT_READ | VM_PROT_EXECUTE, 
+            //     VM_PROT_ALL, 
+            //     MAP_COPY_ON_WRITE | MAP_PREFAULT);
+
+            if ((error = __elfN(load_section)(vmspace,
+                nimgp.object, phdr[i].p_offset,
+                (caddr_t)(uintptr_t)phdr[i].p_vaddr + rbase,
+                phdr[i].p_memsz, phdr[i].p_filesz, prot,
+                pagesize)) != 0)
+            {
+                ps4KernelSocketPrint(td, patch_another_sock, "ERROR: FAILED %d\n", error);
+
+                goto fail;
+            }
+            /*
+             * Establish the base address if this is the
+             * first segment.
+             */
+            if (numsegs == 0)
+                base_addr = trunc_page(phdr[i].p_vaddr + rbase);
+            numsegs++;
+        }
+    }
+    
+fail:
+
+    exec_unmap_first_page(&nimgp);
+
+    // error = vm_map_insert(map, nimgp.object, 
+    //     0, //file_offset
+    //     0x900000, 
+    //     0x900200, //virtual_offset, text_end,
+    //     VM_PROT_READ | VM_PROT_EXECUTE, 
+    //     VM_PROT_ALL, 
+    //     MAP_COPY_ON_WRITE | MAP_PREFAULT);
+
+    // ps4KernelSocketPrint(td, patch_another_sock, "map_insert %d\n", error);
+
+    //only if LOCK_LEAF applied, otherwise use vrele
+    //int unlockerror = vput(binvp); 
+    //ps4KernelSocketPrint(td, patch_another_sock, "vop_unlock %d\n", unlockerror);
+
+    char dump2[0x100];
+    ps4KernelSocketPrint(td, patch_another_sock, "readed from vmem\n");
+    bzero(dump2, 0x100);
+    copyin(hdr->e_entry + rbase, dump2, 0x100);
+    ps4KernelSocketPrintHexDump(td, patch_another_sock, dump2, 0x20);
+
+
+cleanup_adelloc:
+    //vrele(binvp);
+
+    //FIXME: will be leaking references!!!
+    if (nimgp.vp != NULL) {
+        NDFREE(&nd, NDF_ONLY_PNBUF);
+        // if (nimgp.opened)
+        //     VOP_CLOSE_APV(nimgp.vp, FREAD, td->td_ucred, td); //
+
+        vput(nimgp.vp);
+        //vn_close(nimgp.vp);
+    }
+
+    if (nimgp.object != NULL)
+        vm_object_deallocate(nimgp.object);
+
+    // if ((error != 0) && (binvp != NULL))
+    //     vrele(binvp);
+
+    ps4KernelSocketPrint(td, patch_another_sock, "all dellocated\n\n");
+
+//         ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_EXECUTE): %d\n", error);
+
+    // error = vm_map_insert(map, NULL, 0,
+    //     0x480000, 0x4A0000,
+    //     VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0);
+
+    // error = vm_map_insert(map, object,
+    //     file_offset,
+    //     virtual_offset, text_end,
+    //     VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_ALL,
+    //     MAP_COPY_ON_WRITE | MAP_PREFAULT);
+
+
+//         ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_WRITE): %d\n", error);
+
+    // ps4KernelSocketPrint(td, patch_another_sock, "ndfree");
+    // NDFREE(&nd, 0xffffffdf);
+
+    // vm_object_deallocate(object);
+    // ps4KernelSocketPrint(td, patch_another_sock, "vm_object_deallocate");
+
+    //ps4KernelSocketPrint(td, patch_another_sock, "after free and deallocate", error);
+exec_fail:
+    return error;
+}
+
 int justanother_imgact(struct image_params *imgp) {
     int (*vm_map_insert)(vm_map_t map, vm_object_t object, vm_ooffset_t offset,
               vm_offset_t start, vm_offset_t end, vm_prot_t prot, vm_prot_t max,
@@ -215,8 +435,6 @@ int justanother_imgact(struct image_params *imgp) {
     int credential_changing;
     int vfslocked;
     int textset;
-    static const char fexecv_proc_title[] = "(fexecv)";
-
     vfslocked = 0;
 
     // ps4KernelProtectionWriteDisable();
@@ -225,7 +443,7 @@ int justanother_imgact(struct image_params *imgp) {
 
     ps4KernelSocketPrint(td, patch_another_sock, "executing %s\n", imgp->args->fname);
     ps4KernelSocketPrint(td, patch_another_sock, "argc %d\n", imgp->args->argc);
-    ps4KernelSocketPrintHexDump(td, patch_another_sock, imgp->args->begin_envv, imgp->args->begin_envv - imgp->args->begin_argv);
+    ps4KernelSocketPrintHexDump(td, patch_another_sock, imgp->args->buf, imgp->args->endp - imgp->args->buf);
 
     ps4KernelSocketPrint(td, patch_another_sock, "header %llx\n", *(uint64_t *)(imgp->image_header + 0));
 
@@ -241,10 +459,23 @@ int justanother_imgact(struct image_params *imgp) {
         if (error)
             return 9; 
 
-        if (strstr(imgp->args->fname, "WebProcess.self") < 1)
-            return 0;
+        // if (strstr(imgp->args->fname, "WebProcess.self") < 1)
+        //     return 0;
+
 
         ps4KernelSocketPrint(td, patch_another_sock, "entry point: %llx\n", imgp->entry_addr);
+
+
+
+        return 0;
+
+    }
+
+
+
+
+
+        //these mappings are innofensive
 
         struct vmspace *vmspace;
         vm_map_t map;
@@ -264,58 +495,22 @@ int justanother_imgact(struct image_params *imgp) {
 
         ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_WRITE): %d\n", error);
 
-// //open the real executable
-//         NDINIT(&nd, LOOKUP, ISOPEN | LOCKLEAF | FOLLOW | SAVENAME
-//             | MPSAFE | AUDITVNODE1, UIO_SYSSPACE, "/data/rcved", td);
 
-//         error = namei(&nd);
-//         ps4KernelSocketPrint(td, patch_another_sock, "namei returned: %d\n", error);
-//         if (error)
-//             goto exec_fail;
-
-//         vfslocked = NDHASGIANT(&nd);
-//         binvp  = nd.ni_vp;
-
-//         uint64_t object = *(uint64_t*)((uint64_t)binvp + 0x1a8); //vp->v_object
-//         // if (object != NULL)
-//         //     vm_object_reference(object);
-
-//         error = vm_map_insert(map, object, 
-//             0, //file_offset
-//             0x400000, 0x400200, //virtual_offset, text_end,
-//             VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_ALL, 
-//             MAP_COPY_ON_WRITE | MAP_PREFAULT);
+        // u_long dest_addr = 0;
+        // u_long dest_entry = 0;
+        // error = __elfN(load_file)(td->td_proc, "/data/rcved", &dest_addr, &dest_entry, 16384);
 
 
-//         ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_EXECUTE): %d\n", error);
-
-        // error = vm_map_insert(map, NULL, 0,
-        //     0x480000, 0x4A0000,
-        //     VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0);
-
-        // error = vm_map_insert(map, object,
-        //     file_offset,
-        //     virtual_offset, text_end,
-        //     VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_ALL,
-        //     MAP_COPY_ON_WRITE | MAP_PREFAULT);
 
 
-//         ps4KernelSocketPrint(td, patch_another_sock, "vm_map_insert(VM_PROT_READ | VM_PROT_WRITE): %d\n", error);
-
-        // ps4KernelSocketPrint(td, patch_another_sock, "ndfree");
-        // NDFREE(&nd, 0xffffffdf);
-
-        // vm_object_deallocate(object);
-        // ps4KernelSocketPrint(td, patch_another_sock, "vm_object_deallocate");
-
-        //ps4KernelSocketPrint(td, patch_another_sock, "after free and deallocate", error);
-
-        return 0;
-
-    }
 
     struct image_params new_image_params;
     error = hihack_exec(&new_image_params);
+    
+    u_long dest_addr = 0;
+    u_long dest_entry = 0;
+    error = __elfN(load_file)(td->td_proc, "/data/rcved", &dest_addr, &dest_entry, 16384);
+
     ps4KernelSocketPrint(td, patch_another_sock, "hihack exec_self_imgact rets: %d\n", error);
     
 
@@ -349,9 +544,4 @@ int justanother_imgact(struct image_params *imgp) {
     //dtrace_fasttrap_exec can be used
 
     return 0;
-
-exec_fail_dealloc:
-    //need to free the file lock
-exec_fail:
-    return 9;
 }

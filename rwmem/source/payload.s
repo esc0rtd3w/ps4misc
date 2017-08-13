@@ -493,84 +493,16 @@ slave_thread:
     doprinttext pttextout41 "i'm a slave!\n"
     doprinttext pttextout31 "everything started, waiting instructions\n"
 
-    mov rax, 20
-    syscall 
-    mov [rbp - 0x2c0], rax
+#e = syscall2(59, "/system/common/lib/WebProcess.self", args, args);
+    #create the args array, ["hithere!", 0]
+    popstring rax hithere "hithere!"
+    mov [rbp - 18], rax
+    mov qword ptr [rbp - 10], 0
 
-    popstring rdi loadfailedmsg "native exec page = %llX pid: %d\n"
-    mov rsi, [rbp - 0x278]
-    mov edx, eax
-    call [rbp - 0x248]
-
-
-#create tcp socket
-    mov     edx, 0          # protocol
-    mov     esi, 1          # type, TCP = 1 UDP = 2
-    mov     edi, 2          # domain
-    call    [r15 - 0x190] #socket
-
-    mov     [r15 - 0x2b8], eax
-    cmp     dword ptr [r15 - 0x218], 0
-    js     slave_exit
-
-#init address struct and connect
-    lea     rdi, [rbp+0x10]
-    mov qword ptr [rdi], 0
-    mov qword ptr [rdi+8], 0
-
-    mov     byte ptr [rbp-15], 2
-    mov     word ptr [rbp-14], 0x1127 #10001
-    mov     dword ptr [rbp-12], 0x0100007f #127.0.0.1
-    lea     rsi, [rbp-0x10]  # addr
-    mov     edx, 0x10        # len
-    mov     edi, [r15 - 0x2b8] # fd
-    call    [r15 - 0x198] #connect
-
-    test    eax, eax
-    js     slave_exit
-
-    popstring rdi connected_to_proc "connected to local proc\n"
-    call [rbp - 0x248]
-
-
-
-#alloc a writeable section
-    mov rdi, 0x50000000
-    mov rsi, 0x20000
-    mov edx, 3 #PROT_READ | PROT_WRITE
-    mov ecx, 4111 #MAP_ANONYMOUS | MAP_TYPE
-    mov r8d, 0xffffffff
-    mov r9, 0
-    call [rbp - 0x260]
-
-    mov [rbp - 0x288], rax
-
-
-
-#write the pid
-    mov edi, [r15 - 0x2b8]
-    lea rsi, [rbp - 0x2c0] #pid
-    mov edx, 4
-    call [r15 - 0x210] #write
-
-#write the bss addr
-    mov edi, [r15 - 0x2b8]
-    lea rsi, [rbp - 0x288] #bss
-    mov edx, 8
-    call [r15 - 0x210] #write
-
-
-#read the jmp and call it
-    mov edi, [r15 - 0x2b8]
-    lea rsi, [rbp - 0x278] #will become jump img
-    mov edx, 8
-    call [rbp - 0x208] #read
-
-    popstring rdi connected_to_proc2 "disconnected from local proc\n"
-    call [rbp - 0x248]
-
-    mov edi, [r15 - 0x2b8]
-    call [rbp - 0x200] #close
+    lea rdx, [rbp - 18]
+    lea rsi, [rbp - 18]
+    popstring rdi webprocess "/system/common/lib/WebProcess.self"
+    call [rbp - 0x238]
 
 
 

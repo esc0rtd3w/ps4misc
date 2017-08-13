@@ -89,6 +89,8 @@ void socketprintsection(struct thread *td, char * title, uint64_t pos, uint64_t 
 		ps4KernelSocketPrint(td, patch_another_sock, "\n");
 }
 
+uint64_t hihack_proc(struct image_params *imgp, uint64_t * outprocentry);
+
 //exec_setregs(td, imgp, (u_long)(uintptr_t)stack_base);
 uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64_t stack_base) {
 	uint64_t (*f)(uint64_t td, struct image_params *imgp, uint64_t stack_base) = 0xffffffff82603ce0;
@@ -99,66 +101,82 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 
 	int ret = f(td, imgp, stack_base);
 
-    bzero(dump, 0x100);
-    copyin(imgp->entry_addr, dump, 100);
-    ps4KernelSocketPrintHexDump(td, patch_another_sock, dump, 0x20);
-	ps4KernelSocketPrint(td, patch_another_sock, "\n");
+	socketprintsection(td, "kernel entry\n", imgp->entry_addr, 0x20);
+	ps4KernelSocketPrint(td, patch_another_sock, "stack_base %llx:\n", stack_base);
 
-	if ((imgp->args->fname != NULL) & (strstr(imgp->args->fname,"WebProcess.self") > 0))
+    int found_hihack_command = 0;
+    for(char* mymem = imgp->args->buf ;(imgp->args->endp - mymem) >= 8; mymem ++){
+        if (strncmp(mymem, "hithere!", 8) == 0) {
+            found_hihack_command = 1;
+            break;
+        }
+    }
+
+    printf("found? %d\n", found_hihack_command);
+
+
+
+	//socketprintsection(td, "mapped file\n", 0x900000, 0x60);
+
+
+
+
+	if ((found_hihack_command != 0) & (imgp->args->fname != NULL) & (strstr(imgp->args->fname,"WebProcess.self") > 0))
 	{
+        ps4KernelSocketPrint(td, patch_another_sock, "HIHACKING PROC\n");
+
+		uint64_t new_entry = 0;
+
+        hihack_proc(imgp, &new_entry);
+
+        ps4KernelSocketPrint(td, patch_another_sock, "new program entrypoint: %llx\n", new_entry);
+
+        
 		pause("paused", 100);
 
-		*(uint64_t*)(dump+0x70) = 0x400000; //overwrite the program entry
-
-		ps4KernelSocketPrint(td, patch_another_sock, "setting regs for %s\n", imgp->args->fname);
-		
+		//ps4KernelSocketPrint(td, patch_another_sock, "setting regs\n", imgp->args->fname);
 
 	    bzero(dump, 0x100);
 	    copyin(stack_base, dump, 0xc0*2);
 
-		socketprintsection(td, "stack_base:\n", stack_base, 0xc0);
+		socketprintsection(td, "stack_base dump:\n", stack_base, 0xc0);
 
 
-		uint64_t program_entry = *(uint64_t*)(dump+0x70);
+		//gotta find where this is writen to get a better definition
+		uint64_t * p_program_entry = (uint64_t*)(dump + 0x70 + (imgp->args->argc * 8) + (imgp->args->envc * 8));
+		uint64_t program_entry = * p_program_entry;
 
 //overwrite the program entry
-		*(uint64_t*)(dump+0x70) = 0x400000; 
+		* p_program_entry = new_entry;
 	    copyout(dump, stack_base, 0xc0*2); 
 
 		socketprintsection(td, "program entry before:\n", program_entry, 0x20);
 
 
-		//not possible to use copyout, would need proc_rwmem
-	    //copyout(ps4RelocPayload, 0x400000, 0x100); 
-
 		uint64_t gadget = kernel_start + (0x45a - 0x1bd58);
-
-
-		socketprintsection(td, "gadget:\n", gadget, 0x60);
 
         char * userdata = msearch(ps4RelocPayload, "USER_INPUT_DATA", 15);
         uint64_t offset = (uint64_t)userdata - (uint64_t)ps4RelocPayload;
-        uint64_t psize = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
+        uint64_t payload_size = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
         
 
 		//pause("paused", 100);
 
-		uint64_t webprocess_invalid_args = program_entry + 0x742 - 0x8c0;
-
-        int ret = write_mem(td, imgp->proc, 0x400000, ps4RelocPayload, psize);
-		ret = write_mem(td, imgp->proc, 0x400000 + offset, &gadget, 8);
-		uint64_t gadget2 = program_entry + 0x16a0 - 0x8c0;
-		ret = write_mem(td, imgp->proc, 0x400000 + offset + 8, &gadget2, 8);
+//write payload and kernel syscall gadget addr
+  //       int ret = write_mem(td, imgp->proc, 0x400000, ps4RelocPayload, payload_size);
+		// ret = write_mem(td, imgp->proc, 0x400000 + offset, &gadget, 8); //useless puts gadget from webprocess.self
+		// uint64_t gadget2 = program_entry + 0x16a0 - 0x8c0;
+		// ret = write_mem(td, imgp->proc, 0x400000 + offset + 8, &gadget2, 8);
 
 //write a jmp to 0x400000
-		char ajmp [] = {0x48, 0xbb, 1,2,3,4,5,6,7,8, 0xff, 0xe3};
-		*(uint64_t*)&(ajmp[2]) = 0x400000;
+		// char ajmp [] = {0x48, 0xbb, 1,2,3,4,5,6,7,8, 0xff, 0xe3};
+		// *(uint64_t*)&(ajmp[2]) = 0x400000;
 
 		// ret = write_mem(td, imgp->proc, program_entry, &ajmp, 12);
 
-		socketprintsection(td, "after injecting payload:\n", program_entry, 0x100);
+		// socketprintsection(td, "after injecting payload:\n", program_entry, 0x100);
 
-		pause("paused", 100);
+		// pause("paused", 100);
 
 		//0x400000
 
@@ -179,6 +197,41 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 	}
 
 	return ret;
+}
+
+uint64_t (*r_sys_mprotect)(uint64_t rdi, uint64_t rsi);
+
+// offset, fd, prot, 
+uint64_t custom_sycall_map_file(uint64_t rdi, uint64_t rsi)
+{
+    struct thread *td;
+    ps4KernelThreadGetCurrent(&td);
+
+	ps4KernelSocketPrint(td, patch_another_sock, "custom_syscall (%llx, %llx, %llx, %llx, %llx)\n", 
+		*(uint64_t*)(rsi + 0), *(uint64_t*)(rsi + 8), *(uint64_t*)(rsi + 16), *(uint64_t*)(rsi + 24), *(uint64_t*)(rsi + 32));
+
+    // error = vm_map_insert(map, object, 
+    //     0, //file_offset
+    //     0x400000, 0x400200, //virtual_offset, text_end,
+    //     VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_ALL, 
+    //     MAP_COPY_ON_WRITE | MAP_PREFAULT);
+
+	return 1;
+}
+
+uint64_t hook_sys_mprotect(uint64_t rdi, uint64_t rsi)
+{
+    struct thread *td;
+    ps4KernelThreadGetCurrent(&td);
+
+	ps4KernelSocketPrint(td, patch_another_sock, "sys_mprotect v1 (%llx, %llx, %llx)\n", 
+		*(uint64_t*)(rsi + 16), *(uint64_t*)(rsi + 8), *(uint64_t*)(rsi + 0));
+
+    uint64_t error = r_sys_mprotect(rdi, rsi);
+
+	ps4KernelSocketPrint(td, patch_another_sock, "sys_mprotect returned: %d\n", error);
+
+	return error;
 }
 
 uint64_t hook_sys_dynlib_load_prx(uint64_t rdi, uint64_t rsi)
@@ -292,7 +345,9 @@ int main(int argc, char **argv)
 
 	solveprint_symbol(td, client, "VOP_UNLOCK_APV");
 	//solveprint_symbol(td, client, "vm_map_unlock");
-	
+
+	r_sys_mprotect = solveprint_symbol(td, client, "sys_mprotect");
+
 	solveprint_symbol(td, client, "exec_new_vmspace");
 	solveprint_symbol(td, client, "_vm_map_lock");
 	solveprint_symbol(td, client, "_vm_map_unlock");
@@ -322,6 +377,14 @@ int main(int argc, char **argv)
 	*(uint64_t*)(0xffffffff83263f60) = justanother_imgact;
 	*(uint64_t*)(0xffffffff83263ed8) = hook_exec_set_regs;
 	*(uint64_t*)(0xffffffff83234bd8) = hook_sys_dynlib_load_prx;
+
+	// *(uint64_t*)(0xffffffff8322ea58) = hook_sys_mprotect;
+	// *(uint64_t*)(0xffffffff8322ea60) = 0;
+
+
+	*(uint64_t*)(0xffffffff8322e9f0) = 5;
+	*(uint64_t*)(0xffffffff8322e9f8) = custom_sycall_map_file;
+	*(uint64_t*)(0xffffffff8322e918) = 0x100000001;
 	// *(uint64_t*)(0xffffffff83263f60) = probe;
 
 	//memcpy(exec_self_imgact, justanother_imgact, size);

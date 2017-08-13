@@ -123,6 +123,13 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 
 	if ((found_hihack_command != 0) & (imgp->args->fname != NULL) & (strstr(imgp->args->fname,"WebProcess.self") > 0))
 	{
+	    struct vmspace *vmspace;
+	    vm_map_t map;
+
+	    vmspace = imgp->proc->p_vmspace;
+	    map = &vmspace->vm_map;
+
+
         ps4KernelSocketPrint(td, patch_another_sock, "HIHACKING PROC\n");
 
 		uint64_t new_entry = 0;
@@ -132,8 +139,6 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
         ps4KernelSocketPrint(td, patch_another_sock, "new program entrypoint: %llx\n", new_entry);
 
         
-		pause("paused", 100);
-
 		//ps4KernelSocketPrint(td, patch_another_sock, "setting regs\n", imgp->args->fname);
 
 	    bzero(dump, 0x100);
@@ -153,18 +158,30 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 		socketprintsection(td, "program entry before:\n", program_entry, 0x20);
 
 
-		uint64_t gadget = kernel_start + (0x45a - 0x1bd58);
+		uint64_t gadget = kernel_start + (0x45a - 0x1bd58);//1.76 specific, kernel syscall/ret gadget, - kernel.start
 
         char * userdata = msearch(ps4RelocPayload, "USER_INPUT_DATA", 15);
         uint64_t offset = (uint64_t)userdata - (uint64_t)ps4RelocPayload;
         uint64_t payload_size = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
         
 
+
+//shit happens, make it compatible with hito sdk (could use a so many ways to find this gadget without this hack)
+	    int error = vm_map_insert(map, NULL, 0,
+	        0x93a4fc000, 0x93a500000,
+	        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0);
+
+		copyout(&gadget, 0x93a4FFFF8, 8); 
+
+		
+		socketprintsection(td, "hito gadget2:\n", 0x93a4FFFF8, 8);
+		socketprintsection(td, "gadget content:\n", gadget, 0x10);
+
 		//pause("paused", 100);
 
 //write payload and kernel syscall gadget addr
   //       int ret = write_mem(td, imgp->proc, 0x400000, ps4RelocPayload, payload_size);
-		// ret = write_mem(td, imgp->proc, 0x400000 + offset, &gadget, 8); //useless puts gadget from webprocess.self
+		// ret = write_mem(td, imgp->proc, 0x400000 + offset, &gadget, 8); //kernel gadget
 		// uint64_t gadget2 = program_entry + 0x16a0 - 0x8c0;
 		// ret = write_mem(td, imgp->proc, 0x400000 + offset + 8, &gadget2, 8);
 

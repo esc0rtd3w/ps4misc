@@ -1,3 +1,3 @@
-cat bin/function_hook | nc 192.168.2.2 5054
+cat bin/function_hook | nc $ps4ip 5054
 sleep 1
-nc 192.168.2.2 5088
+nc $ps4ip 5088

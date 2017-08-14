@@ -330,15 +330,15 @@ int main(int argc, char **argv) {
         //translated positions for the patches:
 
         //relative to image
-        uint64_t text_mnt_usb0 = useless_zone + (uint64_t)msearch(ps4RelocPayload, "/mnt/sandbox/CUSA00001_0000\x00", strlen("/mnt/sandbox/CUSA00001_0000\x00") + 1) - (uint64_t)ps4RelocPayload;
+        // uint64_t text_mnt_usb0 = useless_zone + (uint64_t)msearch(ps4RelocPayload, "/mnt/sandbox/CUSA00001_0000\x00", strlen("/mnt/sandbox/CUSA00001_0000\x00") + 1) - (uint64_t)ps4RelocPayload;
 
-        char p[] = { 0x48, 0xb8 };
-        char p2[] = { 0x48, 0x89, 0x85, 0x38, 0xf3, 0xff, 0xff ,
-                        0x49, 0x89, 0xc1, 
-                        0x90, 0x90, 0x90};
-        write_process_form_sys(pid, start[0] + 0xe7f53, p, 2);
-        write_process_form_sys(pid, start[0] + 0xe7f53 + 2, (char*)&text_mnt_usb0, 8);
-        write_process_form_sys(pid, start[0] + 0xe7f53 + 10, p2, 7 + 6);
+        // char p[] = { 0x48, 0xb8 };
+        // char p2[] = { 0x48, 0x89, 0x85, 0x38, 0xf3, 0xff, 0xff ,
+        //                 0x49, 0x89, 0xc1, 
+        //                 0x90, 0x90, 0x90};
+        // write_process_form_sys(pid, start[0] + 0xe7f53, p, 2);
+        // write_process_form_sys(pid, start[0] + 0xe7f53 + 2, (char*)&text_mnt_usb0, 8);
+        // write_process_form_sys(pid, start[0] + 0xe7f53 + 10, p2, 7 + 6);
 
 
         char * mymem = msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15);
@@ -348,6 +348,7 @@ int main(int argc, char **argv) {
         char *writebuff = malloc(writesize);
         memcpy(writebuff, ps4RelocPayload, writesize);
 
+
         char * userdata = msearch(writebuff, "USER_INPUT_DATA", 15);
         *(uint64_t*)userdata = start[1];
         *(uint64_t*)(userdata + 8) = start[0] + 0x892790;
@@ -355,28 +356,28 @@ int main(int argc, char **argv) {
 
         printf("useless zone: %x payloadsize: %d datadest: %x\n", useless_zone, writesize, start[1]);
 
+//reset the loading flag
         write_process_form_sys(pid, start[1], "\x40\x00\x00\x00", 4); //start of data section, used for loading flag
         
         write_process_form_sys(pid, useless_zone, writebuff, writesize); //useless zone(exceptions list), has some extra bytes
 
-        //did work until now
-        write_process_form_sys(pid, sceRifManagerEntitlementStatOnHDD, (char*)&StatEntitlement, 30);
-        write_process_form_sys(pid, CheckSkuFlag, (char*)&StatEntitlement, 30);
-        write_process_form_sys(pid, sceNpManagerIntGetSigninState, (char*)&StatEntitlement, 30);
-        write_process_form_sys(pid, start[0] + 0xeb310, "\x90\x90\x90\x90\x90\x90", 6); //pass usb to the sandboxes
-        write_process_form_sys(pid, start[0] + 0xc6899 + 3, "\xa9\xd2\x5c\x00\x49\x89\xc7\x90\x90", 9); //???
-        write_process_form_sys(pid, start[0] + 0x13c281, "\xb8\x00\x00\x00\x00", 5); //null psfmountbigapphdd
-        write_process_form_sys(pid, start[0] + 0x128b43, "\x90\xe9", 2); //null psfmountbigapphdd
-        write_process_form_sys(pid, start[0] + 0xe571e, "\x90\x90\x90\x90\x90\x90", 6); //nmount failed
+        //semiworking
+        // write_process_form_sys(pid, sceRifManagerEntitlementStatOnHDD, (char*)&StatEntitlement, 30);
+        // write_process_form_sys(pid, CheckSkuFlag, (char*)&StatEntitlement, 30);
+        // write_process_form_sys(pid, sceNpManagerIntGetSigninState, (char*)&StatEntitlement, 30);
+        // write_process_form_sys(pid, start[0] + 0xeb310, "\x90\x90\x90\x90\x90\x90", 6); //pass usb to the sandboxes
+        // write_process_form_sys(pid, start[0] + 0xc6899 + 3, "\xa9\xd2\x5c\x00\x49\x89\xc7\x90\x90", 9); //???
+        // write_process_form_sys(pid, start[0] + 0x13c281, "\xb8\x00\x00\x00\x00", 5); //null psfmountbigapphdd
+        // write_process_form_sys(pid, start[0] + 0x128b43, "\x90\xe9", 2); //null psfmountbigapphdd
+        // write_process_form_sys(pid, start[0] + 0xe571e, "\x90\x90\x90\x90\x90\x90", 6); //nmount failed
 
-        write_process_form_sys(pid, start[0] + 0x6ab81d, "/data/app0\x00", 15); //mount source on host
-        write_process_form_sys(pid, start[0] + 0x6ab835, "/app0\x00", 6); //mount dest on jail
+        // write_process_form_sys(pid, start[0] + 0x6ab81d, "/data/app0\x00", 15); //mount source on host
+        // write_process_form_sys(pid, start[0] + 0x6ab835, "/app0\x00", 6); //mount dest on jail
 
         //not working
         //write_process_form_sys(pid, processCheck_unk, (char*)&StatEntitlement, 30);
 
         write_process_form_sys(pid, p_tracefunc, (char*)&useless_zone, 8);
-
         write_process_form_sys(pid, traceflag, "\x01", 1); //enable debug
 
 

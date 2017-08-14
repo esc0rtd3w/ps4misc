@@ -248,7 +248,10 @@ hihack_proc(struct image_params *imgp, char * filename, uint64_t * outprocentry)
     error = namei(&nd);
     ps4KernelSocketPrint(td, patch_another_sock, "namei returned: %d\n", error);
     if (error)
-        goto exec_fail;
+    {
+        NDFREE(&nd, NDF_ONLY_PNBUF);
+        return error;
+    }
 
 //         vfslocked = NDHASGIANT(&nd); //only when passing MP_SAFE to NDINIT
     binvp  = nd.ni_vp;

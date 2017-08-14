@@ -115,79 +115,68 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
     printf("found? %d\n", found_hihack_command);
 
 
+    struct vmspace *vmspace;
+    vm_map_t map;
+
+    vmspace = imgp->proc->p_vmspace;
+    map = &vmspace->vm_map;
+
+    //insert hito gadget
+	uint64_t gadget = kernel_start + (0x45a - 0x1bd58);//1.76 specific, kernel syscall/ret gadget, - kernel.start
+
+    int error = vm_map_insert(map, NULL, 0,
+        0x93a4fc000, 0x93a500000,
+        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0);
+
+	copyout(&gadget, 0x93a4FFFF8, 8); 
+
+	
+	socketprintsection(td, "hito gadget2:\n", 0x93a4FFFF8, 8);
+	socketprintsection(td, "gadget content:\n", gadget, 0x10);
 
 	//socketprintsection(td, "mapped file\n", 0x900000, 0x60);
 
 
 	if ((imgp->args->fname != NULL) & (strstr(imgp->args->fname,"eboot.bin") > 0))
 	{
-	    struct vmspace *vmspace;
-	    vm_map_t map;
-
-	    vmspace = imgp->proc->p_vmspace;
-	    map = &vmspace->vm_map;
 
 
         ps4KernelSocketPrint(td, patch_another_sock, "HIHACKING PROC\n");
 
 		uint64_t new_entry = 0;
 
-        hihack_proc(imgp, "/data/minecraft.bin", &new_entry);
+        hihack_proc(imgp, "/mnt/usb0/app0/CUSA00265.bin", &new_entry);
+        if (new_entry != 0)
+        {
 
-        ps4KernelSocketPrint(td, patch_another_sock, "new program entrypoint: %llx\n", new_entry);
+	        ps4KernelSocketPrint(td, patch_another_sock, "new program entrypoint: %llx\n", new_entry);
 
-        
-		//ps4KernelSocketPrint(td, patch_another_sock, "setting regs\n", imgp->args->fname);
+	        
+			//ps4KernelSocketPrint(td, patch_another_sock, "setting regs\n", imgp->args->fname);
 
-	    bzero(dump, 0x100);
-	    copyin(stack_base, dump, 0xc0*2);
+		    bzero(dump, 0x100);
+		    copyin(stack_base, dump, 0xc0*2);
 
-		socketprintsection(td, "stack_base dump:\n", stack_base, 0xc0);
-
-
-		//gotta find where this is writen to get a better definition
-		uint64_t * p_program_entry = (uint64_t*)(dump + 0x70 + (imgp->args->argc * 8) + (imgp->args->envc * 8));
-		uint64_t program_entry = * p_program_entry;
-
-//overwrite the program entry
-		* p_program_entry = new_entry;
-	    copyout(dump, stack_base, 0xc0*2); 
-
-		socketprintsection(td, "stack_base dump:\n", stack_base, 0xc0);
-
-		socketprintsection(td, "program entry:\n", new_entry, 0x200);
+			socketprintsection(td, "stack_base dump:\n", stack_base, 0xc0);
 
 
-		uint64_t gadget = kernel_start + (0x45a - 0x1bd58);//1.76 specific, kernel syscall/ret gadget, - kernel.start
+			//gotta find where this is writen to get a better definition
+			uint64_t * p_program_entry = (uint64_t*)(dump + 0x70 + (imgp->args->argc * 8) + (imgp->args->envc * 8));
+			uint64_t program_entry = * p_program_entry;
 
-        // char * userdata = msearch(ps4RelocPayload, "USER_INPUT_DATA", 15);
-        // uint64_t offset = (uint64_t)userdata - (uint64_t)ps4RelocPayload;
-        // uint64_t payload_size = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
-        
+	//overwrite the program entry
+			* p_program_entry = new_entry;
+		    copyout(dump, stack_base, 0xc0*2); 
 
-//shit happens, make it compatible with hito sdk (could use a so many ways to find this gadget without this hack)
-	    int error = vm_map_insert(map, NULL, 0,
-	        0x93a4fc000, 0x93a500000,
-	        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0);
+			socketprintsection(td, "stack_base dump:\n", stack_base, 0xc0);
 
-		copyout(&gadget, 0x93a4FFFF8, 8); 
-
-		
-		socketprintsection(td, "hito gadget2:\n", 0x93a4FFFF8, 8);
-		socketprintsection(td, "gadget content:\n", gadget, 0x10);
-
-		ps4KernelSocketPrint(td, patch_another_sock, "pmap_protect returned v35\n");
+			socketprintsection(td, "program entry:\n", new_entry, 0x200);
+        }
 	}
 
 
 	if ((found_hihack_command != 0) & (imgp->args->fname != NULL) & (strstr(imgp->args->fname,"WebProcess.self") > 0))
 	{
-	    struct vmspace *vmspace;
-	    vm_map_t map;
-
-	    vmspace = imgp->proc->p_vmspace;
-	    map = &vmspace->vm_map;
-
 
         ps4KernelSocketPrint(td, patch_another_sock, "HIHACKING PROC\n");
 
@@ -218,26 +207,6 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 
 		socketprintsection(td, "program entry:\n", new_entry, 0x200);
 
-
-		uint64_t gadget = kernel_start + (0x45a - 0x1bd58);//1.76 specific, kernel syscall/ret gadget, - kernel.start
-
-        // char * userdata = msearch(ps4RelocPayload, "USER_INPUT_DATA", 15);
-        // uint64_t offset = (uint64_t)userdata - (uint64_t)ps4RelocPayload;
-        // uint64_t payload_size = (uint64_t)msearch(ps4RelocPayload, "PAYLOADENDSHERE", 15) - (uint64_t)ps4RelocPayload;
-        
-
-//shit happens, make it compatible with hito sdk (could use a so many ways to find this gadget without this hack)
-	    int error = vm_map_insert(map, NULL, 0,
-	        0x93a4fc000, 0x93a500000,
-	        VM_PROT_READ | VM_PROT_WRITE, VM_PROT_ALL, 0);
-
-		copyout(&gadget, 0x93a4FFFF8, 8); 
-
-		
-		socketprintsection(td, "hito gadget2:\n", 0x93a4FFFF8, 8);
-		socketprintsection(td, "gadget content:\n", gadget, 0x10);
-
-		ps4KernelSocketPrint(td, patch_another_sock, "pmap_protect returned v35\n");
 	}
 
 	return ret;
@@ -426,9 +395,30 @@ int main(int argc, char **argv)
 	// *(uint64_t*)(0xffffffff8322ea60) = 0;
 
 
+	//need a customsyscall to write mem
 	*(uint64_t*)(0xffffffff8322e9f0) = 5;
 	*(uint64_t*)(0xffffffff8322e9f8) = custom_sycall_map_file;
 	*(uint64_t*)(0xffffffff8322e918) = 0x100000001;
+
+	*(uint8_t*)(0xffffffff827c67a0) = 0x48;
+	*(uint8_t*)(0xffffffff827c67a1) = 0x31;
+	*(uint8_t*)(0xffffffff827c67a2) = 0xc0;
+	*(uint8_t*)(0xffffffff827c67a3) = 0xc3;
+
+	*(uint8_t*)(0xffffffff825f5210) = 0xb8;
+	*(uint8_t*)(0xffffffff825f5211) = 0x01;
+	*(uint8_t*)(0xffffffff825f5212) = 0x00;
+	*(uint8_t*)(0xffffffff825f5213) = 0x00;
+	*(uint8_t*)(0xffffffff825f5214) = 0x00;
+	*(uint8_t*)(0xffffffff825f5215) = 0xc3;
+
+	*(uint8_t*)(0xffffffff825f5200) = 0xb8; //hasmmapselfcapability, need return 1
+	*(uint8_t*)(0xffffffff825f5201) = 0x01;
+	*(uint8_t*)(0xffffffff825f5202) = 0x00;
+	*(uint8_t*)(0xffffffff825f5203) = 0x00;
+	*(uint8_t*)(0xffffffff825f5204) = 0x00;
+	*(uint8_t*)(0xffffffff825f5205) = 0xc3;
+
 	// *(uint64_t*)(0xffffffff83263f60) = probe;
 
 	//memcpy(exec_self_imgact, justanother_imgact, size);

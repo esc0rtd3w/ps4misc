@@ -3,7 +3,7 @@
 misc ps4 stuff leeched from ps4sdk and ps4link
 
 
-# if u want to run stuff outside the browser
+## if u want to run stuff outside the browser
 
 place a loader in /data/rcved
 

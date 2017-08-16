@@ -52,6 +52,7 @@ __asm__("syscall2: mov $0, %rax \n syscall\n ret");
 int main(int argc, char **argv)
 {
     char* args[10];
+    char* envv[10];
     int64_t f, e;
 
 
@@ -91,11 +92,15 @@ int main(int argc, char **argv)
 
         // printf("func returned\n");
 
-        args[0] = "";
+        envv[0] = NULL;
+
+        args[0] = "!_MAGIC_RUN_THIS_!/data/rsh";
         args[1] = NULL;
 
+
+
         //e = syscall2(59, "/data/rcved", args, args);
-        e = syscall2(59, "/mnt/usb0/app0/eboot.bin", args, args);
+        e = syscall2(59, "/system/common/lib/WebProcess.self", args, envv);
 
         printf("execve: %d\n", e);
         //e = execv("/mnt/usb0/sh", args);

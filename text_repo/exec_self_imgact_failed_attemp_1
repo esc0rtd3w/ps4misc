@@ -1,0 +1,46 @@
+
+    memcpy(0xffffffff82649a16, "\xb8\x00\x00\x00\x00", 5);
+    
+    //nop the authmgrisloadeable statement
+    for (uint64_t i=0xffffffff82649a16; i < 0xffffffff82649a61; i++)
+        *(uint8_t*)i = 0x90;
+
+    memcpy(0xffffffff82649a5c, "\xb8\x00\x00\x00\x00", 5); //put a eax, 0 before this jz
+
+    for (uint64_t i=0xffffffff82649afb; i < 0xffffffff82649b06; i++)
+        *(uint8_t*)i = 0x90;
+
+    memcpy(0xffffffff82649afb, "\x49\x8b\x4d\x28", 4); //mov rcx, [r13 + 0x28] #img base
+
+    memcpy(0xffffffff82649cdf, "\xb8\x01\x00\x00\x00", 5); //dissalow aslr
+
+    memcpy(0xffffffff82649c95, "\xb8\x00\x00\x00\x00", 5); //sceregmgrgetint
+    memcpy(0xffffffff82649cb5, "\xb8\x00\x00\x00\x00", 5); //sceregmgrgetint
+
+    //this one is an error case
+    memcpy(0xffffffff82649e88, "\xb8\x00\x00\x00\x00", 5); //deactivate_self_info
+
+    memcpy(0xffffffff8264a268, "\xb8\x00\x00\x00\x00", 5); //deactivate_self_info
+
+
+    //will direct the execution to error->exit before dynlibproc_initialize_step1
+    for (uint64_t i=0xffffffff8264a274; i < 0xffffffff8264a291; i++)
+        *(uint8_t*)i = 0x90;
+
+
+    memcpy(0xffffffff82649be6, "\xe9\xda\x01\x00\x00", 5); //jump and print a msg
+
+    memcpy(0xffffffff82649be6, "\x90\x90\x90\x90\x90", 5); //after check segments
+
+    memcpy(0xffffffff82649bed, "\x90\x90", 2); //after check segments
+
+    //null jz on a warning to keep trace of execution
+    memcpy(0xffffffff825e3fa5, "\x90\x90", 2); //dynlib_proc_initialize_step1
+    
+    memcpy(0xffffffff82649f94, "\xe9\x85\xfc\xff\xff", 5); 
+    //jz, error, null jmp to exit
+        memcpy(0xffffffff8264a2b5, "\x90\x90", 2); 
+        memcpy(0xffffffff8264a2e3, "\x90\x90\x90\x90\x90", 5); 
+
+        memcpy(0xffffffff8264a363, "\x90\x90", 2); 
+        memcpy(0xffffffff8264a395, "\x90\x90\x90\x90\x90", 5); 

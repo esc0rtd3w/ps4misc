@@ -126,28 +126,32 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 	socketprintsection(td, "kernel entry\n", imgp->entry_addr, 0x20);
 	ps4KernelSocketPrint(td, patch_another_sock, "stack_base %llx:\n", stack_base);
 
-    int found_hihack_command = 0;
+    char * found_hihack_command = NULL;
+    const char * magic = "!_MAGIC_RUN_THIS_!";
+    int slen = strlen(magic);
     for(char* mymem = imgp->args->buf ;(imgp->args->endp - mymem) >= 8; mymem ++){
-        if (strncmp(mymem, "hithere!", 8) == 0) {
-            found_hihack_command = 1;
+        if (strncmp(mymem, magic, slen) == 0) {
+            found_hihack_command = mymem + slen;
             break;
         }
     }
 
-    printf("found? %d\n", found_hihack_command);
-
-
+    ps4KernelSocketPrint(td, patch_another_sock, "found? %d\n", found_hihack_command);
+    if (found_hihack_command)
+    	ps4KernelSocketPrint(td, patch_another_sock, "new program: %s\n", found_hihack_command);
 
 	//socketprintsection(td, "mapped file\n", 0x900000, 0x60);
 
-	if ((found_hihack_command != 0) & (imgp->args->fname != NULL) & (strstr(imgp->args->fname,"WebProcess.self") > 0))
+	if ((found_hihack_command != NULL) & (imgp->args->fname != NULL) & (strstr(imgp->args->fname,"WebProcess.self") > 0))
 	{
+
+		ps4KernelSocketPrint(td, patch_another_sock, "stack_base %llx:\n", stack_base);
 
         ps4KernelSocketPrint(td, patch_another_sock, "HIHACKING PROC\n");
 
 		uint64_t new_entry = 0;
 
-        hihack_proc(imgp, "/data/rcved", &new_entry);
+        hihack_proc(imgp, found_hihack_command, &new_entry);
 
         ps4KernelSocketPrint(td, patch_another_sock, "new program entrypoint: %llx\n", new_entry);
 
@@ -194,8 +198,6 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 
 	if ((imgp->args->fname != NULL) & (strstr(imgp->args->fname,"eboot.bin") > 0))
 	{
-
-
         ps4KernelSocketPrint(td, patch_another_sock, "HIHACKING PROC\n");
 
 		uint64_t new_entry = 0;
@@ -423,6 +425,10 @@ int main(int argc, char **argv)
 	*(uint64_t*)(0xffffffff8322e9f0) = 5;
 	*(uint64_t*)(0xffffffff8322e9f8) = custom_sycall_map_file;
 	*(uint64_t*)(0xffffffff8322e918) = 0x100000001;
+
+	//null getattr and access checks on exec_check_permissions
+	for (uint64_t i=0xffffffff82407147; i< 0xffffffff824071ce; i++) 
+		*(uint8_t*)i = 0x90;
 
 	// *(uint8_t*)(0xffffffff827c67a0) = 0x48;
 	// *(uint8_t*)(0xffffffff827c67a1) = 0x31;

@@ -495,14 +495,16 @@ slave_thread:
 
 #e = syscall2(59, "/system/common/lib/WebProcess.self", args, args);
     #create the args array, ["hithere!", 0]
-    popstring rax hithere "hithere!"
-    mov [rbp - 18], rax
-    mov qword ptr [rbp - 10], 0
+    popstring rax hithere "!_MAGIC_RUN_THIS_!/data/rcved"
+    mov [rbp - 0x18], rax
+    mov qword ptr [rbp - 0x10], 0
+    mov qword ptr [rbp - 0x20], 0
 
-    lea rdx, [rbp - 18]
-    lea rsi, [rbp - 18]
+    lea rdx, [rbp - 0x20]
+    #lea rdx, [rbp - 0x18]
+    lea rsi, [rbp - 0x18]
     popstring rdi webprocess "/system/common/lib/WebProcess.self"
-    call [rbp - 0x238]
+    call [rbp - 0x238] #execve
 
 
 

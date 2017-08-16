@@ -103,17 +103,34 @@ int main(int argc, char **argv)
 
     printf("connection accepted, waiting file\n");
     
-    int f = open("/data/rcved", O_WRONLY | O_CREAT);
-
     char * buf = malloc(4096 * 10);
+    char * wbuf;
     int readed;
+    int nameset = 0;
+    int f = 0;
+
     while (1)
     {
         readed = read(outsock, buf, 4096 * 10);
+        wbuf = buf;
+        if (nameset == 0) {
+            for (int i=0; i<readed;i++)
+            {
+                if (buf[i] == 0) {
+                    f = open(buf, O_WRONLY | O_CREAT);
+                    printf("setting name to %s\n", buf);
+                    //name comes to here
+                    wbuf = buf + i + 1;
+                    readed -= i + 1;
+                    nameset = 1;
+                    break;
+                }
+            }
+        }
         if (readed < 1)
             break;
-        ps4StandardIoPrintHexDump(buf, 0x10);
-        write(f, buf, readed);
+        //ps4StandardIoPrintHexDump(wbuf, 0x10);
+        write(f, wbuf, readed);
         printf("readed = %d\n", readed);
     }
     close(f);

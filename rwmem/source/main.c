@@ -327,6 +327,9 @@ int main(int argc, char **argv) {
         printf("\n");
 
 
+        //patch always mount /data
+        write_process_form_sys(pid, start[0]+0xe57e5, "\x90\x90\x90\x90\x90\x90", 6); //enable debug
+
         //translated positions for the patches:
 
         //relative to image

@@ -264,8 +264,14 @@ hihack_proc(struct image_params *imgp, char * filename, uint64_t * outprocentry)
     nimgp.attr = &attr;
 
     uint64_t cp_error = exec_check_permissions(&nimgp);
-    
+
     ps4KernelSocketPrint(td, patch_another_sock, "exec_check_permissions: %d, opened: %d\n", cp_error, nimgp.opened);
+
+    if (cp_error)
+    {
+        NDFREE(&nd, NDF_ONLY_PNBUF);
+        return cp_error;
+    }
 
 
     //could do some checks with map/unmap, ignore for now

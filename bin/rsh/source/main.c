@@ -37,11 +37,39 @@
 #include <ps4/util.h>
 #include <ps4/error.h>
 
+void syscall2(uint64_t i_rdi, ...) {
+   __asm__(
+   "push %%r11\n\
+   mov $0x93a4FFFF8, %%r11\n\
+   mov (%%r11), %%r11\n\
+   mov %0, %%rdi;\n\
+   mov $0, %%rax;\n\
+   call *%%r11\n\
+   pop %%r11" : : "r" (i_rdi)
+   );
+}
 
-int main(int argc, char **argv) {
-    printf("hello world %d %llx\n", argc, argv);
+int main(uint64_t stackbase) {
+    //syscall2(4, 1, "hi_there", 8);
+
+    uint64_t cur_stack;
+
+   __asm__(
+    "mov %%rbp, %0" 
+        : "=r" (cur_stack) :
+   );
+
+    printf("hello world, stackbase: %llx curstackptr: %llx\n", stackbase, cur_stack);
+    uint64_t argc = *(uint64_t*)stackbase;
+
+    printf("argc = %d \n", argc);
+
+    for (int i=0; i<10; i++)
+    {
+        printf("stack[i]: %llx\n", *(uint64_t*)(cur_stack + i*8 ));
+    }
 
     //try bind sock
     //can't, exit
-
+    return 0;
 }

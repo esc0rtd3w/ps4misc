@@ -500,7 +500,7 @@ slave_thread:
     mov qword ptr [rbp - 0x10], 0
     mov qword ptr [rbp - 0x20], 0
 
-    lea rdx, [rbp - 0x20]
+    lea rdx, [rbp - 0x18]
     #lea rdx, [rbp - 0x18]
     lea rsi, [rbp - 0x18]
     popstring rdi webprocess "/system/common/lib/WebProcess.self"

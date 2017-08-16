@@ -100,6 +100,7 @@ int main(int argc, char **argv)
 
 
         //e = syscall2(59, "/data/rcved", args, args);
+        //e = syscall2(59, "/data/app0/eboot.bin", args, envv);
         e = syscall2(59, "/system/common/lib/WebProcess.self", args, envv);
 
         printf("execve: %d\n", e);

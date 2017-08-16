@@ -3,6 +3,7 @@
 import socket
 import os
 import sys
+import time
 
 # connect to 8099
 # sendfilename
@@ -21,6 +22,8 @@ msg = open(localfile, "rb").read()
 
 #print("cat $ps4misc/bin/rcvfile/bin/rcvfile | nc %s 6053" % (sys.argv[-3],))
 os.system("cat $ps4misc/bin/rcvfile/bin/rcvfile | nc %s 6053" % (sys.argv[-3],))
+
+time.sleep(0.2)
 
 # create an INET, STREAMing socket
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

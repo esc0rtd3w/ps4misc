@@ -100,7 +100,7 @@ void add_0x93a4FFFF8_gadget(struct thread *td, struct image_params *imgp, uint64
     map = &vmspace->vm_map;
 
     //insert hito gadget
-	uint64_t gadget = kernel_start + (0x45a - 0x1bd58);//1.76 specific, kernel syscall/ret gadget, - kernel.start
+	uint64_t gadget = kernel_start + 0x45a - 0x1bd58;//1.76 specific, kernel syscall/ret gadget, - kernel.start
 
     int error = vm_map_insert(map, NULL, 0,
         0x93a4fc000, 0x93a500000,
@@ -194,6 +194,7 @@ uint64_t hook_exec_set_regs(struct thread *td, struct image_params *imgp, uint64
 		
 		socketprintsection(td, "hito gadget2:\n", 0x93a4FFFF8, 8);
 		socketprintsection(td, "gadget content:\n", gadget, 0x10);
+
 	}
 
 	if ((imgp->args->fname != NULL) & (strstr(imgp->args->fname,"eboot.bin") > 0))
@@ -430,6 +431,9 @@ int main(int argc, char **argv)
 	for (uint64_t i=0xffffffff82407147; i< 0xffffffff824071ce; i++) 
 		*(uint8_t*)i = 0x90;
 
+	//one of this patches is making execve fail?
+	//will make libkernel load more modules than needed in each proc, including GnmDriver
+	
 	// *(uint8_t*)(0xffffffff827c67a0) = 0x48;
 	// *(uint8_t*)(0xffffffff827c67a1) = 0x31;
 	// *(uint8_t*)(0xffffffff827c67a2) = 0xc0;

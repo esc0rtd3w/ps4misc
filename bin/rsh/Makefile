@@ -10,9 +10,11 @@ $(error Neither PS4SDK, Ps4Sdk nor ps4sdk set)
 endif
 endif
 
-target ?= ps4_elf
+target ?= ps4_bin
 
 #need to add this flags
 #-Wl,-T script.ld
+
+###################################
 
 include $(Ps4Sdk)/make/ps4sdk.mk
